@@ -211,9 +211,38 @@ const pruneCapturedLinks = (links, fetchItems) => {
   });
 };
 
+const getDataWeight = (value) => {
+  if (value === null || value === undefined) {
+    return 0;
+  }
+
+  if (Array.isArray(value)) {
+    return value.length;
+  }
+
+  if (typeof value === "object") {
+    return Object.keys(value).length;
+  }
+
+  return 1;
+};
+
+const shouldReplaceCapturedPayload = (existingItem, incomingItem) => {
+  const existingWeight = getDataWeight(existingItem?.data);
+  const incomingWeight = getDataWeight(incomingItem?.data);
+
+  if (incomingWeight !== existingWeight) {
+    return incomingWeight > existingWeight;
+  }
+
+  const existingCapturedAt = Date.parse(existingItem?.capturedAt || 0);
+  const incomingCapturedAt = Date.parse(incomingItem?.capturedAt || 0);
+  return incomingCapturedAt > existingCapturedAt;
+};
+
 const mergeFetchData = (existingItems, incomingItems) => {
   const getKey = (item) => `${item.pageUrl || ""}::${item.requestUrl || ""}`;
-  const seen = new Set(existingItems.map(getKey));
+  const indexByKey = new Map(existingItems.map((item, index) => [getKey(item), index]));
   const merged = [...existingItems];
 
   incomingItems.forEach((item) => {
@@ -224,19 +253,32 @@ const mergeFetchData = (existingItems, incomingItems) => {
       return;
     }
 
-    const key = `${pageUrl}::${requestUrl}`;
-    if (seen.has(key)) {
-      return;
-    }
-
-    seen.add(key);
-    merged.unshift({
+    const normalizedItem = {
       pageUrl,
       requestUrl,
       source: item.source || "network-json",
       capturedAt: item.capturedAt || new Date().toISOString(),
       data: item.data
-    });
+    };
+
+    const key = `${pageUrl}::${requestUrl}`;
+    const existingIndex = indexByKey.get(key);
+
+    if (existingIndex === undefined) {
+      merged.unshift(normalizedItem);
+      indexByKey.set(key, 0);
+      for (const [trackedKey, trackedIndex] of indexByKey.entries()) {
+        if (trackedKey !== key) {
+          indexByKey.set(trackedKey, trackedIndex + 1);
+        }
+      }
+      return;
+    }
+
+    const existingItem = merged[existingIndex];
+    if (shouldReplaceCapturedPayload(existingItem, normalizedItem)) {
+      merged[existingIndex] = normalizedItem;
+    }
   });
 
   return merged;
