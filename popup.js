@@ -1,4 +1,5 @@
 const historyList = document.getElementById("history");
+const contentHistoryList = document.getElementById("content-history");
 const recordButton = document.getElementById("record");
 const captureNowButton = document.getElementById("capture-now");
 const clearButton = document.getElementById("clear");
@@ -157,6 +158,14 @@ const renderHistory = (items) => {
     row.appendChild(link);
     entry.appendChild(row);
     entry.appendChild(meta);
+
+    if (item.source === "shipments-list") {
+      const badge = document.createElement("span");
+      badge.className = "history__badge";
+      badge.textContent = "Captured from shipments page";
+      entry.appendChild(badge);
+    }
+
     historyList.appendChild(entry);
   });
 
@@ -164,12 +173,52 @@ const renderHistory = (items) => {
   setSelectionButtonsUi(items);
 };
 
+const renderCapturedContent = (items) => {
+  contentHistoryList.innerHTML = "";
+
+  if (!items.length) {
+    const emptyState = document.createElement("li");
+    emptyState.className = "empty";
+    emptyState.textContent = "No shipment content yet. Open a shipment link while recording.";
+    contentHistoryList.appendChild(emptyState);
+    return;
+  }
+
+  items.forEach((item) => {
+    const entry = document.createElement("li");
+
+    const pageLink = document.createElement("a");
+    pageLink.href = item.pageUrl;
+    pageLink.textContent = item.pageUrl;
+    pageLink.target = "_blank";
+
+    const meta = document.createElement("span");
+    meta.textContent = `${item.source || "network-json"} · ${new Date(item.capturedAt).toLocaleString()}`;
+
+    const request = document.createElement("span");
+    request.textContent = `Request: ${item.requestUrl}`;
+
+    const content = document.createElement("textarea");
+    content.className = "selected-content__output";
+    content.readOnly = true;
+    content.value = JSON.stringify(item.data, null, 2);
+
+    entry.appendChild(pageLink);
+    entry.appendChild(meta);
+    entry.appendChild(request);
+    entry.appendChild(content);
+    contentHistoryList.appendChild(entry);
+  });
+};
+
 const refreshHistory = async () => {
-  const data = await storageGet({ capturedLinks: [] });
+  const data = await storageGet({ capturedLinks: [], capturedFetchData: [] });
   const captures = data.capturedLinks || [];
+  const capturedContent = data.capturedFetchData || [];
   const validKeys = new Set(captures.map((item) => item.canonicalUrl || normalizeUrl(item.url)));
   selectedUrls = new Set([...selectedUrls].filter((key) => validKeys.has(key)));
   renderHistory(captures);
+  renderCapturedContent(capturedContent);
 };
 
 const captureCurrentTab = async (reason) => {
@@ -282,7 +331,7 @@ lockRightCheckbox.addEventListener("change", async () => {
 });
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName !== "local" || !changes.capturedLinks) {
+  if (areaName !== "local" || (!changes.capturedLinks && !changes.capturedFetchData)) {
     return;
   }
 
