@@ -117,7 +117,7 @@ const renderHistory = (items) => {
   if (!items.length) {
     const emptyState = document.createElement("li");
     emptyState.className = "empty";
-    emptyState.textContent = "No Wakeo links yet. Open Wakeo.com and capture.";
+    emptyState.textContent = "No shipment links yet. Open Wakeo and capture.";
     historyList.appendChild(emptyState);
     hideSelectedContent();
     setStatsUi(items);

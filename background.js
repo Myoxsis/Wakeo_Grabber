@@ -30,6 +30,15 @@ const isWakeoUrl = (url = "") => {
   }
 };
 
+const isShipmentUrl = (url = "") => {
+  const canonicalUrl = normalizeUrl(url);
+  if (!canonicalUrl || !isWakeoUrl(canonicalUrl)) {
+    return false;
+  }
+
+  return canonicalUrl.toLowerCase().includes("shipment");
+};
+
 const storageGet = (defaults) =>
   new Promise((resolve) => {
     chrome.storage.local.get(defaults, resolve);
@@ -119,7 +128,7 @@ const mergeLinks = (existingLinks, incomingLinks) => {
 
   incomingLinks.forEach((link) => {
     const canonicalUrl = link.canonicalUrl || normalizeUrl(link.url);
-    if (!canonicalUrl || !isWakeoUrl(canonicalUrl) || seen.has(canonicalUrl)) {
+    if (!canonicalUrl || !isShipmentUrl(canonicalUrl) || seen.has(canonicalUrl)) {
       return;
     }
 
