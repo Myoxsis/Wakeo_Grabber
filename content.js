@@ -228,7 +228,7 @@ const toPageHookFetchEntry = (payload) => {
   }
 
   const pageUrl = normalizeUrl(window.location.href);
-  if (!pageUrl || !isShipmentUrl(pageUrl)) {
+  if (!pageUrl || !isWakeoUrl(pageUrl)) {
     return null;
   }
 
