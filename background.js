@@ -50,7 +50,8 @@ const isWakeoApiUrl = (url = "") => {
     const hostname = parsed.hostname.toLowerCase();
     const pathname = parsed.pathname.toLowerCase();
     const isSupportedHost = hostname === "app.wakeo.co" || hostname === "internal.api.wakeo.co";
-    return isSupportedHost && pathname.startsWith("/api/");
+    const isOrderPath = pathname.includes("order");
+    return isSupportedHost && pathname.startsWith("/api/") && isOrderPath;
   } catch (error) {
     return false;
   }
