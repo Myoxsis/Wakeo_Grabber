@@ -7,19 +7,17 @@ body {
   margin: 0;
   background: #f5f7fb;
   color: #1b1b1f;
-  min-width: 320px;
-  min-height: 420px;
-  resize: both;
-  overflow: auto;
+  min-width: 360px;
+  min-height: 460px;
 }
 
 .popup {
   width: 100%;
-  max-width: 480px;
+  max-width: 560px;
   padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
   box-sizing: border-box;
 }
 
@@ -35,46 +33,12 @@ body {
 }
 
 .popup__actions {
-  display: flex;
-  gap: 8px;
-}
-
-.popup__tabs {
-  display: grid;
-  gap: 12px;
-}
-
-.tabs {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
 
-.tab {
-  padding: 8px 10px;
-  border-radius: 999px;
-  border: none;
-  font-size: 12px;
-  background: #e4e9f2;
-  color: #1b1b1f;
-  cursor: pointer;
-}
-
-.tab.active {
-  background: #2b6df5;
-  color: #fff;
-}
-
-.tab-panel {
-  display: none;
-}
-
-.tab-panel.active {
-  display: block;
-}
-
 button {
-  flex: 1;
   padding: 10px 12px;
   border-radius: 10px;
   border: none;
@@ -92,6 +56,19 @@ button.ghost {
   color: #1b1b1f;
 }
 
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.lock-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #384150;
+}
+
 .popup__history h2 {
   margin: 0 0 8px;
   font-size: 14px;
@@ -103,20 +80,8 @@ button.ghost {
   margin: 0;
   display: grid;
   gap: 8px;
-  max-height: 240px;
+  max-height: 280px;
   overflow: auto;
-}
-
-.gedcom {
-  background: #ffffff;
-  border-radius: 10px;
-  padding: 12px;
-  font-size: 11px;
-  line-height: 1.4;
-  white-space: pre-wrap;
-  max-height: 240px;
-  overflow: auto;
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.08);
 }
 
 .history li {
@@ -126,12 +91,19 @@ button.ghost {
   box-shadow: 0 1px 2px rgba(16, 24, 40, 0.08);
 }
 
+.history__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
 .history li a {
   color: #2b6df5;
   font-weight: 600;
   text-decoration: none;
   display: block;
   margin-bottom: 4px;
+  word-break: break-all;
 }
 
 .history li span {

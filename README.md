@@ -1,8 +1,19 @@
-# Geneanet_Explorer
-Powerful Chrome extension designed for genealogy enthusiasts and family historians. While exploring online family trees, this tool lets you seamlessly capture ancestor details—names, dates, places, relationships—directly from the page without switching tabs or copying by hand.
+# Wakeo Grabber
+Chrome extension to capture only `wakeo.com` links from:
+- the current page URL,
+- links present in the DOM,
+- and network resources visible through DevTools-like `performance` entries.
+
+## Features
+- Record mode for automatic capture while browsing Wakeo.
+- Manual capture button.
+- Captured links list with multi-select.
+- Mass delete selected items.
+- Download selected items as JSON.
+- Optional "lock on the right side" behavior via Chrome Side Panel.
 
 ## Getting started
 1. Open Chrome and go to `chrome://extensions`.
 2. Enable **Developer mode**.
 3. Click **Load unpacked** and select this repository folder.
-4. Click the Geneanet Explorer icon to open the popup and capture the current page.
+4. Open Wakeo and use the extension popup.
