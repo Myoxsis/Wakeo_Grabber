@@ -6,6 +6,9 @@ const selectAllButton = document.getElementById("select-all");
 const deleteSelectedButton = document.getElementById("delete-selected");
 const downloadSelectedButton = document.getElementById("download-selected");
 const lockRightCheckbox = document.getElementById("lock-right");
+const selectedContentSection = document.getElementById("selected-content");
+const selectedContentOutput = document.getElementById("selected-content-output");
+const copySelectedButton = document.getElementById("copy-selected");
 
 let selectedUrls = new Set();
 
@@ -39,6 +42,13 @@ const setSelectionButtonsUi = (captures) => {
 
 const getSelectedCaptures = (captures) =>
   captures.filter((item) => selectedUrls.has(item.canonicalUrl || normalizeUrl(item.url)));
+
+const showSelectedContent = (content) => {
+  selectedContentOutput.value = content;
+  selectedContentSection.hidden = false;
+  selectedContentOutput.focus();
+  selectedContentOutput.select();
+};
 
 const renderHistory = (items) => {
   historyList.innerHTML = "";
@@ -169,14 +179,25 @@ downloadSelectedButton.addEventListener("click", () => {
       return;
     }
 
-    const blob = new Blob([JSON.stringify(selected, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `wakeo-links-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+    showSelectedContent(JSON.stringify(selected, null, 2));
   });
+});
+
+copySelectedButton.addEventListener("click", async () => {
+  if (!selectedContentOutput.value) {
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(selectedContentOutput.value);
+    copySelectedButton.textContent = "Copied";
+    setTimeout(() => {
+      copySelectedButton.textContent = "Copy";
+    }, 1200);
+  } catch (error) {
+    selectedContentOutput.focus();
+    selectedContentOutput.select();
+  }
 });
 
 lockRightCheckbox.addEventListener("change", () => {

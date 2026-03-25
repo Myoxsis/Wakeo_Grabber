@@ -28,6 +28,19 @@
         <button id="clear" class="ghost">Clear all</button>
       </section>
 
+      <section id="selected-content" class="selected-content" hidden>
+        <div class="selected-content__header">
+          <h2>Selected content</h2>
+          <button id="copy-selected" class="ghost" type="button">Copy</button>
+        </div>
+        <textarea
+          id="selected-content-output"
+          class="selected-content__output"
+          readonly
+          aria-label="Selected captured content"
+        ></textarea>
+      </section>
+
       <label class="lock-toggle">
         <input id="lock-right" type="checkbox" />
         <span>Lock popup on the right side (open side panel)</span>
