@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Geneanet Explorer</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="popup">
+      <header class="popup__header">
+        <h1>Geneanet Explorer</h1>
+        <p>Capture ancestor details without leaving the page.</p>
+      </header>
+
+      <section class="popup__actions">
+        <button id="record" class="primary">Start recording</button>
+        <button id="clear" class="ghost">Clear history</button>
+      </section>
+
+      <section class="popup__tabs" aria-label="Capture views">
+        <div class="tabs" role="tablist">
+          <button class="tab active" role="tab" aria-selected="true" data-tab="captures">
+            Captured individuals
+          </button>
+          <button class="tab" role="tab" aria-selected="false" data-tab="gedcom">
+            Consolidated GEDCOM
+          </button>
+        </div>
+
+        <div class="tab-panel active" role="tabpanel" data-panel="captures">
+          <section class="popup__history" aria-live="polite">
+            <h2>Captured individuals</h2>
+            <ul id="history" class="history"></ul>
+          </section>
+        </div>
+
+        <div class="tab-panel" role="tabpanel" data-panel="gedcom">
+          <section class="popup__history">
+            <h2>GEDCOM output</h2>
+            <pre id="gedcom" class="gedcom"></pre>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
