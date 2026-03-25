@@ -1,9 +1,17 @@
 const TAB_CAPTURE_STATE = new Map();
 
+const STORAGE_DEFAULTS = {
+  capturedLinks: [],
+  capturedFetchData: [],
+  recording: false,
+  lockRightSide: false
+};
+
 const normalizeUrl = (url = "") => {
   if (!url) {
     return null;
   }
+
   try {
     const parsed = new URL(url);
     parsed.hash = "";
@@ -22,44 +30,60 @@ const isWakeoUrl = (url = "") => {
   }
 };
 
-chrome.runtime.onInstalled.addListener(() => {
-  chrome.storage.local.set({
-    capturedLinks: [],
-    capturedFetchData: [],
-    recording: false,
-    lockRightSide: false
+const storageGet = (defaults) =>
+  new Promise((resolve) => {
+    chrome.storage.local.get(defaults, resolve);
   });
+
+const storageSet = (value) =>
+  new Promise((resolve) => {
+    chrome.storage.local.set(value, resolve);
+  });
+
+const queryAllTabs = () =>
+  new Promise((resolve) => {
+    chrome.tabs.query({}, resolve);
+  });
+
+const sendTabMessage = (tabId, message) =>
+  new Promise((resolve) => {
+    chrome.tabs.sendMessage(tabId, message, () => {
+      resolve(!chrome.runtime.lastError);
+    });
+  });
+
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.storage.local.set(STORAGE_DEFAULTS);
 });
 
-const captureTab = (tabId, reason = "auto") => {
-  chrome.tabs.sendMessage(tabId, { type: "capture-request", reason }, () => {
-    const lastError = chrome.runtime.lastError;
-    if (lastError) {
-      return;
-    }
-  });
+const captureTab = async (tabId, reason = "auto") => {
+  await sendTabMessage(tabId, { type: "capture-request", reason });
 };
 
-const captureAllWakeoTabs = () => {
-  chrome.tabs.query({}, (tabs) => {
+const captureAllWakeoTabs = async () => {
+  const tabs = await queryAllTabs();
+
+  await Promise.all(
     tabs
       .filter((tab) => isWakeoUrl(tab.url || ""))
-      .forEach((tab) => {
-        if (tab.id) {
-          TAB_CAPTURE_STATE.set(tab.id, tab.url || "");
-          captureTab(tab.id, "recording-started");
+      .map(async (tab) => {
+        if (!tab.id) {
+          return;
         }
-      });
-  });
+
+        TAB_CAPTURE_STATE.set(tab.id, tab.url || "");
+        await captureTab(tab.id, "recording-started");
+      })
+  );
 };
 
-const handleRecordingUpdate = (recording) => {
+const handleRecordingUpdate = async (recording) => {
   if (!recording) {
     TAB_CAPTURE_STATE.clear();
     return;
   }
 
-  captureAllWakeoTabs();
+  await captureAllWakeoTabs();
 };
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
@@ -67,7 +91,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     return;
   }
 
-  chrome.storage.local.get({ recording: false }, (data) => {
+  storageGet({ recording: false }).then((data) => {
     if (!data.recording) {
       return;
     }
@@ -88,7 +112,9 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 });
 
 const mergeLinks = (existingLinks, incomingLinks) => {
-  const seen = new Set(existingLinks.map((item) => item.canonicalUrl || normalizeUrl(item.url)).filter(Boolean));
+  const seen = new Set(
+    existingLinks.map((item) => item.canonicalUrl || normalizeUrl(item.url)).filter(Boolean)
+  );
   const merged = [...existingLinks];
 
   incomingLinks.forEach((link) => {
@@ -96,6 +122,7 @@ const mergeLinks = (existingLinks, incomingLinks) => {
     if (!canonicalUrl || !isWakeoUrl(canonicalUrl) || seen.has(canonicalUrl)) {
       return;
     }
+
     seen.add(canonicalUrl);
     merged.unshift({
       url: link.url,
@@ -139,41 +166,41 @@ const mergeFetchData = (existingItems, incomingItems) => {
   return merged;
 };
 
+const messageHandlers = {
+  "capture-links": async (message) => {
+    const data = await storageGet({ capturedLinks: [] });
+    const updated = mergeLinks(data.capturedLinks, message.payload.links || []);
+    await storageSet({ capturedLinks: updated });
+    return { ok: true, count: updated.length };
+  },
+  "capture-fetch-data": async (message) => {
+    const data = await storageGet({ capturedFetchData: [] });
+    const updated = mergeFetchData(data.capturedFetchData, message.payload.fetchData || []);
+    await storageSet({ capturedFetchData: updated });
+    return { ok: true, count: updated.length };
+  },
+  "set-recording": async (message) => {
+    const recording = Boolean(message.payload.recording);
+    await storageSet({ recording });
+    await handleRecordingUpdate(recording);
+    return { ok: true, recording };
+  },
+  "set-lock-right-side": async (message) => {
+    const lockRightSide = Boolean(message.payload.lockRightSide);
+    await storageSet({ lockRightSide });
+    return { ok: true, lockRightSide };
+  }
+};
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === "capture-links") {
-    chrome.storage.local.get({ capturedLinks: [] }, (data) => {
-      const updated = mergeLinks(data.capturedLinks, message.payload.links || []);
-      chrome.storage.local.set({ capturedLinks: updated }, () => {
-        sendResponse({ ok: true, count: updated.length });
-      });
-    });
-    return true;
+  const handler = messageHandlers[message.type];
+  if (!handler) {
+    return false;
   }
 
-  if (message.type === "capture-fetch-data") {
-    chrome.storage.local.get({ capturedFetchData: [] }, (data) => {
-      const updated = mergeFetchData(data.capturedFetchData, message.payload.fetchData || []);
-      chrome.storage.local.set({ capturedFetchData: updated }, () => {
-        sendResponse({ ok: true, count: updated.length });
-      });
-    });
-    return true;
-  }
+  handler(message, sender)
+    .then((response) => sendResponse(response))
+    .catch(() => sendResponse({ ok: false }));
 
-  if (message.type === "set-recording") {
-    chrome.storage.local.set({ recording: message.payload.recording }, () => {
-      handleRecordingUpdate(message.payload.recording);
-      sendResponse({ ok: true, recording: message.payload.recording });
-    });
-    return true;
-  }
-
-  if (message.type === "set-lock-right-side") {
-    chrome.storage.local.set({ lockRightSide: message.payload.lockRightSide }, () => {
-      sendResponse({ ok: true, lockRightSide: message.payload.lockRightSide });
-    });
-    return true;
-  }
-
-  return false;
+  return true;
 });

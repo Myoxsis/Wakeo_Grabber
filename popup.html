@@ -13,6 +13,11 @@
         <p>Capture Wakeo.com links from page + network requests.</p>
       </header>
 
+      <section class="popup__stats" aria-live="polite">
+        <span id="capture-count" class="stat-pill">0 links</span>
+        <span id="selection-count" class="stat-pill">0 selected</span>
+      </section>
+
       <section class="popup__actions">
         <button id="record" class="primary">Start recording</button>
         <button id="capture-now" class="ghost">Capture now</button>
@@ -24,7 +29,7 @@
       </section>
 
       <section class="popup__actions">
-        <button id="download-selected" class="ghost">Download selected</button>
+        <button id="download-selected" class="ghost">Export selected JSON</button>
         <button id="clear" class="ghost">Clear all</button>
       </section>
 
