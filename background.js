@@ -61,11 +61,26 @@ const sendTabMessage = (tabId, message) =>
     });
   });
 
+const injectMainWorldHook = (tabId) =>
+  new Promise((resolve) => {
+    chrome.scripting.executeScript(
+      {
+        target: { tabId },
+        files: ["page-hook.js"],
+        world: "MAIN"
+      },
+      () => {
+        resolve(!chrome.runtime.lastError);
+      }
+    );
+  });
+
 chrome.runtime.onInstalled.addListener(() => {
   chrome.storage.local.set(STORAGE_DEFAULTS);
 });
 
 const captureTab = async (tabId, reason = "auto") => {
+  await injectMainWorldHook(tabId);
   await sendTabMessage(tabId, { type: "capture-request", reason });
 };
 
@@ -100,13 +115,15 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     return;
   }
 
+  const currentUrl = tab?.url || changeInfo.url || "";
+  if (!isWakeoUrl(currentUrl)) {
+    return;
+  }
+
+  injectMainWorldHook(tabId);
+
   storageGet({ recording: false }).then((data) => {
     if (!data.recording) {
-      return;
-    }
-
-    const currentUrl = tab?.url || changeInfo.url || "";
-    if (!isWakeoUrl(currentUrl)) {
       return;
     }
 
@@ -220,7 +237,7 @@ const messageHandlers = {
 };
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  const handler = messageHandlers[message.type];
+  const handler = messageHandlers[message?.type];
   if (!handler) {
     return false;
   }

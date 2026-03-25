@@ -12,8 +12,6 @@ const normalizeUrl = (url = "") => {
 };
 
 const PAGE_HOOK_EVENT = "wakeo-grabber-network-capture";
-const PAGE_HOOK_SCRIPT_ID = "wakeo-grabber-page-hook";
-const MAX_CAPTURED_PAYLOADS = 150;
 
 const isWakeoUrl = (url = "") => {
   try {
@@ -45,6 +43,26 @@ const toLinkEntry = (url, source) => {
     source,
     capturedAt: new Date().toISOString()
   };
+};
+
+const safeRuntimeSendMessage = (message, callback) => {
+  if (!chrome?.runtime?.id) {
+    callback?.({ ok: false, reason: "extension-context-invalidated" });
+    return;
+  }
+
+  try {
+    chrome.runtime.sendMessage(message, (response) => {
+      if (chrome.runtime.lastError) {
+        callback?.({ ok: false, reason: chrome.runtime.lastError.message });
+        return;
+      }
+
+      callback?.(response);
+    });
+  } catch (error) {
+    callback?.({ ok: false, reason: "runtime-send-failed" });
+  }
 };
 
 const collectWakeoLinks = () => {
@@ -81,7 +99,7 @@ const pushCapturedLinks = () => {
   }
 
   const links = collectWakeoLinks();
-  chrome.runtime.sendMessage({ type: "capture-links", payload: { links } });
+  safeRuntimeSendMessage({ type: "capture-links", payload: { links } });
 };
 
 let recordIntervalId = null;
@@ -212,16 +230,12 @@ const flushPageHookQueue = async () => {
   flushPageHookQueue.inFlight = true;
   const payload = queuedItems.splice(0, queuedItems.length);
 
-  try {
-    chrome.runtime.sendMessage({ type: "capture-fetch-data", payload: { fetchData: payload } }, () => {
-      flushPageHookQueue.inFlight = false;
-      if (flushPageHookQueue.queue.length) {
-        flushPageHookQueue();
-      }
-    });
-  } catch (error) {
+  safeRuntimeSendMessage({ type: "capture-fetch-data", payload: { fetchData: payload } }, () => {
     flushPageHookQueue.inFlight = false;
-  }
+    if (flushPageHookQueue.queue.length) {
+      flushPageHookQueue();
+    }
+  });
 };
 flushPageHookQueue.queue = [];
 flushPageHookQueue.inFlight = false;
@@ -232,19 +246,11 @@ const enqueuePageHookCapture = (entry) => {
   }
 
   flushPageHookQueue.queue.push(entry);
-  if (flushPageHookQueue.queue.length > MAX_CAPTURED_PAYLOADS) {
-    flushPageHookQueue.queue.shift();
-  }
-
   flushPageHookQueue();
 };
 
 const handlePageHookEvent = (event) => {
-  if (event.source !== window || event.origin !== window.location.origin) {
-    return;
-  }
-
-  const detail = event.data?.detail;
+  const detail = event.detail;
   if (!detail || detail.type !== PAGE_HOOK_EVENT) {
     return;
   }
@@ -253,121 +259,8 @@ const handlePageHookEvent = (event) => {
   enqueuePageHookCapture(entry);
 };
 
-const injectPageNetworkHook = () => {
-  if (document.getElementById(PAGE_HOOK_SCRIPT_ID)) {
-    return;
-  }
-
-  const script = document.createElement("script");
-  script.id = PAGE_HOOK_SCRIPT_ID;
-  script.type = "text/javascript";
-  script.textContent = `(() => {
-    if (window.__wakeoGrabberHookInstalled) {
-      return;
-    }
-    window.__wakeoGrabberHookInstalled = true;
-
-    const EVENT_TYPE = "${PAGE_HOOK_EVENT}";
-    const postPayload = (payload) => {
-      try {
-        window.postMessage({ detail: { type: EVENT_TYPE, payload } }, window.location.origin);
-      } catch (error) {}
-    };
-
-    const isShipmentEndpoint = (url) => {
-      if (!url || typeof url !== "string") {
-        return false;
-      }
-
-      try {
-        const parsed = new URL(url, window.location.origin);
-        const normalized = parsed.toString().toLowerCase();
-        return parsed.hostname === "app.wakeo.co" &&
-          (normalized.includes("/shipment") || normalized.includes("/shipments"));
-      } catch (error) {
-        return false;
-      }
-    };
-
-    const shouldCapture = (response, requestUrl) => {
-      if (!response || !response.ok || !isShipmentEndpoint(requestUrl)) {
-        return false;
-      }
-      const contentType = response.headers?.get?.("content-type") || "";
-      return contentType.toLowerCase().includes("application/json");
-    };
-
-    const originalFetch = window.fetch;
-    if (typeof originalFetch === "function") {
-      window.fetch = async (...args) => {
-        const response = await originalFetch.apply(window, args);
-        const requestUrl = response?.url || args?.[0]?.url || String(args?.[0] || "");
-
-        if (shouldCapture(response, requestUrl)) {
-          response
-            .clone()
-            .json()
-            .then((data) => {
-              postPayload({
-                requestUrl,
-                source: "page-fetch-hook",
-                capturedAt: new Date().toISOString(),
-                data
-              });
-            })
-            .catch(() => {});
-        }
-
-        return response;
-      };
-    }
-
-    const originalOpen = XMLHttpRequest.prototype.open;
-    const originalSend = XMLHttpRequest.prototype.send;
-
-    XMLHttpRequest.prototype.open = function(method, url, ...rest) {
-      this.__wakeoGrabberRequestUrl = typeof url === "string" ? url : "";
-      return originalOpen.call(this, method, url, ...rest);
-    };
-
-    XMLHttpRequest.prototype.send = function(...args) {
-      this.addEventListener("load", () => {
-        try {
-          const requestUrl = this.responseURL || this.__wakeoGrabberRequestUrl || "";
-          if (!isShipmentEndpoint(requestUrl) || this.status < 200 || this.status >= 300) {
-            return;
-          }
-
-          const contentType = this.getResponseHeader("content-type") || "";
-          if (!contentType.toLowerCase().includes("application/json")) {
-            return;
-          }
-
-          const text = typeof this.responseText === "string" ? this.responseText : "";
-          if (!text) {
-            return;
-          }
-
-          postPayload({
-            requestUrl,
-            source: "page-xhr-hook",
-            capturedAt: new Date().toISOString(),
-            data: JSON.parse(text)
-          });
-        } catch (error) {}
-      });
-
-      return originalSend.apply(this, args);
-    };
-  })();`;
-
-  (document.documentElement || document.head || document.body).appendChild(script);
-  script.remove();
-};
-
 if (isWakeoUrl(window.location.href)) {
-  window.addEventListener("message", handlePageHookEvent);
-  injectPageNetworkHook();
+  window.addEventListener(PAGE_HOOK_EVENT, handlePageHookEvent);
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -381,18 +274,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const links = collectWakeoLinks();
       const shipmentFetchData = await collectShipmentFetchData();
 
-      chrome.runtime.sendMessage({ type: "capture-links", payload: { links } }, () => {
+      safeRuntimeSendMessage({ type: "capture-links", payload: { links } }, () => {
         if (!shipmentFetchData.length) {
           sendResponse({ ok: true, links: links.length, fetchData: 0 });
           return;
         }
 
-        chrome.runtime.sendMessage(
-          { type: "capture-fetch-data", payload: { fetchData: shipmentFetchData } },
-          () => {
-            sendResponse({ ok: true, links: links.length, fetchData: shipmentFetchData.length });
-          }
-        );
+        safeRuntimeSendMessage({ type: "capture-fetch-data", payload: { fetchData: shipmentFetchData } }, () => {
+          sendResponse({ ok: true, links: links.length, fetchData: shipmentFetchData.length });
+        });
       });
     })();
 
