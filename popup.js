@@ -25,6 +25,10 @@ const normalizeUrl = (url = "") => {
   }
 };
 
+const areAllCapturesSelected = (captures) =>
+  captures.length > 0 &&
+  captures.every((item) => selectedUrls.has(item.canonicalUrl || normalizeUrl(item.url)));
+
 const setRecordingUi = (recording) => {
   recordButton.textContent = recording ? "Stop recording" : "Start recording";
   recordButton.classList.toggle("primary", !recording);
@@ -34,10 +38,14 @@ const setRecordingUi = (recording) => {
 const setSelectionButtonsUi = (captures) => {
   const hasSelection = selectedUrls.size > 0;
   const hasItems = captures.length > 0;
+  const allSelected = areAllCapturesSelected(captures);
+
   deleteSelectedButton.disabled = !hasSelection;
   downloadSelectedButton.disabled = !hasSelection;
   selectAllButton.disabled = !hasItems;
   clearButton.disabled = !hasItems;
+  selectAllButton.textContent = allSelected ? "Deselect all" : "Select all";
+  selectAllButton.setAttribute("aria-pressed", allSelected ? "true" : "false");
 };
 
 const getSelectedCaptures = (captures) =>
@@ -150,10 +158,12 @@ clearButton.addEventListener("click", () => {
 selectAllButton.addEventListener("click", () => {
   chrome.storage.local.get({ capturedLinks: [] }, (data) => {
     const captures = data.capturedLinks || [];
-    const shouldSelectAll = selectedUrls.size !== captures.length;
+    const shouldSelectAll = !areAllCapturesSelected(captures);
+
     selectedUrls = shouldSelectAll
       ? new Set(captures.map((item) => item.canonicalUrl || normalizeUrl(item.url)))
       : new Set();
+
     renderHistory(captures);
   });
 });
