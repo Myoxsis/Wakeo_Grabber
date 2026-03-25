@@ -44,9 +44,27 @@
       </section>
 
       <section class="tab-panel" data-panel="content" hidden>
+        <section class="popup__actions">
+          <button id="content-select-all" class="ghost">Select all content</button>
+          <button id="content-download-selected" class="ghost">Download selected content</button>
+        </section>
+
         <section class="popup__history" aria-live="polite">
           <h2>Captured shipment content</h2>
           <ul id="content-history" class="history"></ul>
+        </section>
+
+        <section id="content-selected-preview" class="selected-content" hidden>
+          <div class="selected-content__header">
+            <h2>Selected captured shipment content</h2>
+            <button id="content-copy-selected" class="ghost" type="button">Copy</button>
+          </div>
+          <textarea
+            id="content-selected-output"
+            class="selected-content__output"
+            readonly
+            aria-label="Selected captured shipment content"
+          ></textarea>
         </section>
       </section>
 

@@ -1,5 +1,10 @@
 const historyList = document.getElementById("history");
 const contentHistoryList = document.getElementById("content-history");
+const contentSelectAllButton = document.getElementById("content-select-all");
+const contentDownloadSelectedButton = document.getElementById("content-download-selected");
+const contentSelectedPreview = document.getElementById("content-selected-preview");
+const contentSelectedOutput = document.getElementById("content-selected-output");
+const contentCopySelectedButton = document.getElementById("content-copy-selected");
 const recordButton = document.getElementById("record");
 const captureNowButton = document.getElementById("capture-now");
 const autoProcessButton = document.getElementById("auto-process");
@@ -18,6 +23,7 @@ const tabButtons = [...document.querySelectorAll(".tab")];
 const tabPanels = [...document.querySelectorAll(".tab-panel")];
 
 let selectedUrls = new Set();
+let selectedContentKeys = new Set();
 
 const normalizeUrl = (url = "") => {
   if (!url) {
@@ -106,6 +112,23 @@ const setSelectionButtonsUi = (captures) => {
   selectAllButton.setAttribute("aria-pressed", allSelected ? "true" : "false");
 };
 
+const getContentKey = (item) =>
+  [item.pageUrl || "", item.requestUrl || "", item.capturedAt || ""].join("::");
+
+const areAllContentSelected = (capturedContent) =>
+  capturedContent.length > 0 && capturedContent.every((item) => selectedContentKeys.has(getContentKey(item)));
+
+const setContentSelectionUi = (capturedContent) => {
+  const hasItems = capturedContent.length > 0;
+  const hasSelection = selectedContentKeys.size > 0;
+  const allSelected = areAllContentSelected(capturedContent);
+
+  contentSelectAllButton.disabled = !hasItems;
+  contentDownloadSelectedButton.disabled = !hasSelection;
+  contentSelectAllButton.textContent = allSelected ? "Deselect all content" : "Select all content";
+  contentSelectAllButton.setAttribute("aria-pressed", allSelected ? "true" : "false");
+};
+
 const getSelectedCaptures = (captures) =>
   captures.filter((item) => selectedUrls.has(item.canonicalUrl || normalizeUrl(item.url)));
 
@@ -119,6 +142,18 @@ const showSelectedContent = (content) => {
 const hideSelectedContent = () => {
   selectedContentSection.hidden = true;
   selectedContentOutput.value = "";
+};
+
+const showSelectedCapturedContent = (content) => {
+  contentSelectedOutput.value = content;
+  contentSelectedPreview.hidden = false;
+  contentSelectedOutput.focus();
+  contentSelectedOutput.select();
+};
+
+const hideSelectedCapturedContent = () => {
+  contentSelectedPreview.hidden = true;
+  contentSelectedOutput.value = "";
 };
 
 const downloadJsonFile = (content) => {
@@ -194,11 +229,31 @@ const renderCapturedContent = (items) => {
     emptyState.className = "empty";
     emptyState.textContent = "No shipment content yet.";
     contentHistoryList.appendChild(emptyState);
+    hideSelectedCapturedContent();
+    setContentSelectionUi(items);
     return;
   }
 
   items.forEach((item) => {
+    const key = getContentKey(item);
     const entry = document.createElement("li");
+    const row = document.createElement("label");
+    row.className = "history__row";
+
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = selectedContentKeys.has(key);
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) {
+        selectedContentKeys.add(key);
+      } else {
+        selectedContentKeys.delete(key);
+      }
+      setContentSelectionUi(items);
+    });
+
+    const rowContent = document.createElement("div");
+    rowContent.className = "history__row-content";
 
     const pageLink = document.createElement("a");
     pageLink.href = item.pageUrl;
@@ -211,11 +266,16 @@ const renderCapturedContent = (items) => {
     const request = document.createElement("span");
     request.textContent = `Request: ${item.requestUrl}`;
 
-    entry.appendChild(pageLink);
-    entry.appendChild(meta);
-    entry.appendChild(request);
+    rowContent.appendChild(pageLink);
+    rowContent.appendChild(meta);
+    rowContent.appendChild(request);
+    row.appendChild(checkbox);
+    row.appendChild(rowContent);
+    entry.appendChild(row);
     contentHistoryList.appendChild(entry);
   });
+
+  setContentSelectionUi(items);
 };
 
 const refreshHistory = async () => {
@@ -223,7 +283,9 @@ const refreshHistory = async () => {
   const captures = data.capturedLinks || [];
   const capturedContent = data.capturedFetchData || [];
   const validKeys = new Set(captures.map((item) => item.canonicalUrl || normalizeUrl(item.url)));
+  const validContentKeys = new Set(capturedContent.map(getContentKey));
   selectedUrls = new Set([...selectedUrls].filter((key) => validKeys.has(key)));
+  selectedContentKeys = new Set([...selectedContentKeys].filter((key) => validContentKeys.has(key)));
   renderHistory(captures);
   renderCapturedContent(capturedContent);
   setStatsUi(captures, capturedContent);
@@ -355,6 +417,47 @@ copySelectedButton.addEventListener("click", async () => {
   } catch (error) {
     selectedContentOutput.focus();
     selectedContentOutput.select();
+  }
+});
+
+contentSelectAllButton.addEventListener("click", async () => {
+  const data = await storageGet({ capturedFetchData: [] });
+  const capturedContent = data.capturedFetchData || [];
+  const shouldSelectAll = !areAllContentSelected(capturedContent);
+
+  selectedContentKeys = shouldSelectAll ? new Set(capturedContent.map(getContentKey)) : new Set();
+
+  renderCapturedContent(capturedContent);
+});
+
+contentDownloadSelectedButton.addEventListener("click", async () => {
+  const data = await storageGet({ capturedFetchData: [] });
+  const capturedContent = data.capturedFetchData || [];
+  const selectedContent = capturedContent.filter((item) => selectedContentKeys.has(getContentKey(item)));
+
+  if (!selectedContent.length) {
+    return;
+  }
+
+  const content = JSON.stringify(selectedContent, null, 2);
+  showSelectedCapturedContent(content);
+  downloadJsonFile(content);
+});
+
+contentCopySelectedButton.addEventListener("click", async () => {
+  if (!contentSelectedOutput.value) {
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(contentSelectedOutput.value);
+    contentCopySelectedButton.textContent = "Copied";
+    setTimeout(() => {
+      contentCopySelectedButton.textContent = "Copy";
+    }, 1200);
+  } catch (error) {
+    contentSelectedOutput.focus();
+    contentSelectedOutput.select();
   }
 });
 

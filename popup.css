@@ -164,6 +164,11 @@ button:disabled {
   gap: 8px;
 }
 
+.history__row-content {
+  flex: 1;
+  min-width: 0;
+}
+
 .history li a {
   color: #2b6df5;
   font-weight: 600;
