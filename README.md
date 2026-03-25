@@ -5,9 +5,10 @@ Chrome extension to capture only `app.wakeo.co` links from:
 - and network resources visible through DevTools-like `performance` entries.
 
 ## Features
-- Record mode for automatic capture while browsing Wakeo.
+- Record mode for automatic capture while browsing Wakeo (including immediate capture when recording starts).
 - Manual capture button.
 - Captured links list with multi-select.
+- Shipment page network JSON capture (`/shipment*` fetch/xhr resources).
 - Mass delete selected items.
 - Download selected items as JSON.
 - Optional "lock on the right side" behavior via Chrome Side Panel.

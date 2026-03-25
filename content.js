@@ -34,6 +34,23 @@ const toLinkEntry = (url, source) => {
   };
 };
 
+const collectShipmentLinksFromShipmentsPage = () => {
+  if (!window.location.pathname.startsWith("/shipments")) {
+    return [];
+  }
+
+  const links = [];
+  document.querySelectorAll('a[href^="/shipment"]').forEach((anchor) => {
+    const absoluteUrl = new URL(anchor.getAttribute("href"), window.location.origin).toString();
+    const entry = toLinkEntry(absoluteUrl, "shipments-list");
+    if (entry) {
+      links.push(entry);
+    }
+  });
+
+  return links;
+};
+
 const collectWakeoLinks = () => {
   const links = [];
   const pushLink = (url, source) => {
@@ -49,6 +66,8 @@ const collectWakeoLinks = () => {
     pushLink(anchor.href, "dom");
   });
 
+  collectShipmentLinksFromShipmentsPage().forEach((entry) => links.push(entry));
+
   performance.getEntriesByType("resource").forEach((entry) => {
     if (entry?.name) {
       pushLink(entry.name, "network");
@@ -58,6 +77,67 @@ const collectWakeoLinks = () => {
   return links;
 };
 
+const collectShipmentFetchData = async () => {
+  if (!window.location.pathname.startsWith("/shipment")) {
+    return [];
+  }
+
+  const seenRequestUrls = new Set();
+  const candidates = performance
+    .getEntriesByType("resource")
+    .filter((entry) => entry?.name && ["fetch", "xmlhttprequest"].includes(entry.initiatorType))
+    .map((entry) => entry.name)
+    .filter((url) => {
+      const normalized = normalizeUrl(url);
+      return normalized && isWakeoUrl(normalized) && normalized.includes("/shipment");
+    })
+    .filter((url) => {
+      const canonical = normalizeUrl(url);
+      if (!canonical || seenRequestUrls.has(canonical)) {
+        return false;
+      }
+      seenRequestUrls.add(canonical);
+      return true;
+    });
+
+  const capturedAt = new Date().toISOString();
+  const fetchData = await Promise.all(
+    candidates.map(async (requestUrl) => {
+      try {
+        const response = await fetch(requestUrl, {
+          method: "GET",
+          credentials: "include",
+          headers: {
+            Accept: "application/json"
+          }
+        });
+
+        if (!response.ok) {
+          return null;
+        }
+
+        const contentType = response.headers.get("content-type") || "";
+        if (!contentType.toLowerCase().includes("application/json")) {
+          return null;
+        }
+
+        const data = await response.json();
+        return {
+          pageUrl: normalizeUrl(window.location.href),
+          requestUrl: normalizeUrl(requestUrl),
+          source: "network-json",
+          capturedAt,
+          data
+        };
+      } catch (error) {
+        return null;
+      }
+    })
+  );
+
+  return fetchData.filter(Boolean);
+};
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "capture-request") {
     if (!isWakeoUrl(window.location.href)) {
@@ -65,10 +145,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return false;
     }
 
-    const links = collectWakeoLinks();
-    chrome.runtime.sendMessage({ type: "capture-links", payload: { links } }, (response) => {
-      sendResponse({ ok: true, response });
-    });
+    (async () => {
+      const links = collectWakeoLinks();
+      const shipmentFetchData = await collectShipmentFetchData();
+
+      chrome.runtime.sendMessage({ type: "capture-links", payload: { links } }, () => {
+        if (!shipmentFetchData.length) {
+          sendResponse({ ok: true, links: links.length, fetchData: 0 });
+          return;
+        }
+
+        chrome.runtime.sendMessage(
+          { type: "capture-fetch-data", payload: { fetchData: shipmentFetchData } },
+          () => {
+            sendResponse({ ok: true, links: links.length, fetchData: shipmentFetchData.length });
+          }
+        );
+      });
+    })();
+
     return true;
   }
 
