@@ -1,3 +1,8 @@
+if (window.__wakeoGrabberContentInstalled) {
+  // Already initialized for this document (can happen after programmatic reinjection).
+} else {
+  window.__wakeoGrabberContentInstalled = true;
+
 const normalizeUrl = (url = "") => {
   if (!url) {
     return null;
@@ -327,3 +332,5 @@ withActiveExtensionContext(() => {
     setContinuousCapture(Boolean(changes.recording.newValue));
   });
 });
+
+}

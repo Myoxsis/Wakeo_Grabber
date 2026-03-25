@@ -61,6 +61,19 @@ const sendTabMessage = (tabId, message) =>
     });
   });
 
+const injectContentScript = (tabId) =>
+  new Promise((resolve) => {
+    chrome.scripting.executeScript(
+      {
+        target: { tabId },
+        files: ["content.js"]
+      },
+      () => {
+        resolve(!chrome.runtime.lastError);
+      }
+    );
+  });
+
 const injectMainWorldHook = (tabId) =>
   new Promise((resolve) => {
     chrome.scripting.executeScript(
@@ -87,6 +100,7 @@ chrome.runtime.onInstalled.addListener(() => {
 
 
 const captureTab = async (tabId, reason = "auto") => {
+  await injectContentScript(tabId);
   await injectMainWorldHook(tabId);
   await sendTabMessage(tabId, { type: "capture-request", reason });
 };
