@@ -144,6 +144,18 @@ const mergeLinks = (existingLinks, incomingLinks) => {
   return merged;
 };
 
+const pruneCapturedLinks = (links, fetchItems) => {
+  const capturedPageUrls = new Set(fetchItems.map((item) => normalizeUrl(item.pageUrl)).filter(Boolean));
+  if (!capturedPageUrls.size) {
+    return links;
+  }
+
+  return links.filter((link) => {
+    const canonicalUrl = link.canonicalUrl || normalizeUrl(link.url);
+    return !capturedPageUrls.has(canonicalUrl);
+  });
+};
+
 const mergeFetchData = (existingItems, incomingItems) => {
   const getKey = (item) => `${item.pageUrl || ""}::${item.requestUrl || ""}`;
   const seen = new Set(existingItems.map(getKey));
@@ -177,20 +189,26 @@ const mergeFetchData = (existingItems, incomingItems) => {
 
 const messageHandlers = {
   "capture-links": async (message) => {
-    const data = await storageGet({ capturedLinks: [] });
-    const updated = mergeLinks(data.capturedLinks, message.payload.links || []);
+    const data = await storageGet({ capturedLinks: [], capturedFetchData: [] });
+    const mergedLinks = mergeLinks(data.capturedLinks, message.payload.links || []);
+    const updated = pruneCapturedLinks(mergedLinks, data.capturedFetchData || []);
     await storageSet({ capturedLinks: updated });
     return { ok: true, count: updated.length };
   },
   "capture-fetch-data": async (message) => {
-    const data = await storageGet({ capturedFetchData: [] });
-    const updated = mergeFetchData(data.capturedFetchData, message.payload.fetchData || []);
-    await storageSet({ capturedFetchData: updated });
-    return { ok: true, count: updated.length };
+    const data = await storageGet({ capturedFetchData: [], capturedLinks: [] });
+    const updatedFetchData = mergeFetchData(data.capturedFetchData, message.payload.fetchData || []);
+    const updatedLinks = pruneCapturedLinks(data.capturedLinks || [], updatedFetchData);
+    await storageSet({ capturedFetchData: updatedFetchData, capturedLinks: updatedLinks });
+    return { ok: true, count: updatedFetchData.length };
   },
   "set-recording": async (message) => {
     const recording = Boolean(message.payload.recording);
-    await storageSet({ recording });
+    const data = await storageGet({ capturedLinks: [], capturedFetchData: [] });
+    const capturedLinks = recording
+      ? pruneCapturedLinks(data.capturedLinks || [], data.capturedFetchData || [])
+      : data.capturedLinks || [];
+    await storageSet({ recording, capturedLinks });
     await handleRecordingUpdate(recording);
     return { ok: true, recording };
   },
