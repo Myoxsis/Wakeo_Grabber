@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Wakeo Grabber",
   "version": "0.2.0",
-  "description": "Capture app.wakeo.co links from page and network requests.",
+  "description": "Capture Wakeo shipment links and API payloads from page and network requests.",
   "action": {
     "default_title": "Wakeo Grabber",
     "default_popup": "popup.html"
@@ -21,7 +21,8 @@
     "scripting"
   ],
   "host_permissions": [
-    "*://app.wakeo.co/*"
+    "*://app.wakeo.co/*",
+    "*://internal.api.wakeo.co/*"
   ],
   "content_scripts": [
     {

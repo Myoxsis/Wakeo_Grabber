@@ -39,6 +39,23 @@ const isShipmentUrl = (url = "") => {
   return canonicalUrl.toLowerCase().includes("shipment");
 };
 
+const isWakeoApiUrl = (url = "") => {
+  const canonicalUrl = normalizeUrl(url);
+  if (!canonicalUrl) {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(canonicalUrl);
+    const hostname = parsed.hostname.toLowerCase();
+    const pathname = parsed.pathname.toLowerCase();
+    const isSupportedHost = hostname === "app.wakeo.co" || hostname === "internal.api.wakeo.co";
+    return isSupportedHost && pathname.startsWith("/api/");
+  } catch (error) {
+    return false;
+  }
+};
+
 const storageGet = (defaults) =>
   new Promise((resolve) => {
     chrome.storage.local.get(defaults, resolve);
@@ -203,7 +220,7 @@ const mergeFetchData = (existingItems, incomingItems) => {
     const pageUrl = normalizeUrl(item.pageUrl);
     const requestUrl = normalizeUrl(item.requestUrl);
 
-    if (!pageUrl || !requestUrl || !isWakeoUrl(pageUrl) || !isWakeoUrl(requestUrl)) {
+    if (!pageUrl || !requestUrl || !isWakeoUrl(pageUrl) || !isWakeoApiUrl(requestUrl)) {
       return;
     }
 
