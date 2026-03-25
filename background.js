@@ -1,4 +1,5 @@
 const TAB_CAPTURE_STATE = new Map();
+
 const normalizeUrl = (url = "") => {
   if (!url) {
     return null;
@@ -12,8 +13,17 @@ const normalizeUrl = (url = "") => {
   }
 };
 
+const isWakeoUrl = (url = "") => {
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname === "wakeo.com" || parsed.hostname.endsWith(".wakeo.com");
+  } catch (error) {
+    return false;
+  }
+};
+
 chrome.runtime.onInstalled.addListener(() => {
-  chrome.storage.local.set({ capturedProfiles: [], recording: false });
+  chrome.storage.local.set({ capturedLinks: [], recording: false, lockRightSide: false });
 });
 
 const captureTab = (tabId, reason = "auto") => {
@@ -42,6 +52,10 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     }
 
     const currentUrl = tab?.url || changeInfo.url || "";
+    if (!isWakeoUrl(currentUrl)) {
+      return;
+    }
+
     const lastUrl = TAB_CAPTURE_STATE.get(tabId);
     if (!currentUrl || lastUrl === currentUrl) {
       return;
@@ -52,27 +66,38 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   });
 });
 
+const mergeLinks = (existingLinks, incomingLinks) => {
+  const seen = new Set(existingLinks.map((item) => item.canonicalUrl || normalizeUrl(item.url)).filter(Boolean));
+  const merged = [...existingLinks];
+
+  incomingLinks.forEach((link) => {
+    const canonicalUrl = link.canonicalUrl || normalizeUrl(link.url);
+    if (!canonicalUrl || !isWakeoUrl(canonicalUrl) || seen.has(canonicalUrl)) {
+      return;
+    }
+    seen.add(canonicalUrl);
+    merged.unshift({
+      url: link.url,
+      canonicalUrl,
+      source: link.source || "unknown",
+      capturedAt: link.capturedAt || new Date().toISOString()
+    });
+  });
+
+  return merged;
+};
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === "capture-profile") {
-    chrome.storage.local.get({ capturedProfiles: [] }, (data) => {
-      const urlKey = message.payload.canonicalUrl || normalizeUrl(message.payload.url);
-      const existing = urlKey
-        ? data.capturedProfiles.some((profile) => {
-            const existingKey = profile.canonicalUrl || normalizeUrl(profile.url);
-            return existingKey === urlKey;
-          })
-        : false;
-      if (existing) {
-        sendResponse({ ok: true, count: data.capturedProfiles.length, skipped: true });
-        return;
-      }
-      const updated = [message.payload, ...data.capturedProfiles];
-      chrome.storage.local.set({ capturedProfiles: updated }, () => {
+  if (message.type === "capture-links") {
+    chrome.storage.local.get({ capturedLinks: [] }, (data) => {
+      const updated = mergeLinks(data.capturedLinks, message.payload.links || []);
+      chrome.storage.local.set({ capturedLinks: updated }, () => {
         sendResponse({ ok: true, count: updated.length });
       });
     });
     return true;
   }
+
   if (message.type === "set-recording") {
     chrome.storage.local.set({ recording: message.payload.recording }, () => {
       handleRecordingUpdate(message.payload.recording);
@@ -80,5 +105,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     });
     return true;
   }
+
+  if (message.type === "set-lock-right-side") {
+    chrome.storage.local.set({ lockRightSide: message.payload.lockRightSide }, () => {
+      sendResponse({ ok: true, lockRightSide: message.payload.lockRightSide });
+    });
+    return true;
+  }
+
   return false;
 });
