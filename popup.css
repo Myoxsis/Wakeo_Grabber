@@ -7,14 +7,13 @@ body {
   margin: 0;
   background: #f5f7fb;
   color: #1b1b1f;
-  min-width: 360px;
-  min-height: 460px;
+  min-width: 380px;
+  min-height: 520px;
 }
 
 .popup {
   width: 100%;
-  max-width: 560px;
-  padding: 16px;
+  padding: 14px;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -28,17 +27,18 @@ body {
 
 .popup__header p {
   margin: 0;
-  font-size: 13px;
+  font-size: 12px;
   color: #5f6368;
 }
 
 .popup__stats {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
 .stat-pill {
-  font-size: 12px;
+  font-size: 11px;
   color: #334155;
   background: #e8eefb;
   border-radius: 999px;
@@ -51,11 +51,36 @@ body {
   gap: 8px;
 }
 
+.popup__actions--top {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
+.tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+}
+
+.tab {
+  border: 1px solid #d6ddeb;
+  background: #fff;
+  color: #435069;
+  border-radius: 10px;
+  padding: 8px;
+  font-size: 12px;
+}
+
+.tab.is-active {
+  border-color: #2b6df5;
+  background: #eef4ff;
+  color: #2b6df5;
+}
+
 button {
   padding: 10px 12px;
   border-radius: 10px;
   border: none;
-  font-size: 13px;
+  font-size: 12px;
   cursor: pointer;
 }
 
@@ -74,17 +99,18 @@ button:disabled {
   cursor: not-allowed;
 }
 
+.popup__history h2,
+.selected-content__header h2 {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+
 .lock-toggle {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
+  font-size: 12px;
   color: #384150;
-}
-
-.popup__history h2 {
-  margin: 0 0 8px;
-  font-size: 14px;
 }
 
 .selected-content {
@@ -100,26 +126,19 @@ button:disabled {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-}
-
-.selected-content__header h2 {
-  margin: 0;
-  font-size: 14px;
 }
 
 .selected-content__output {
   width: 100%;
-  min-height: 100px;
-  max-height: 160px;
+  min-height: 120px;
+  max-height: 220px;
   resize: vertical;
   border: 1px solid #d4dae6;
   border-radius: 8px;
   box-sizing: border-box;
   padding: 8px;
   font-size: 12px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
-    "Courier New", monospace;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
 }
 
 .history {
@@ -155,7 +174,8 @@ button:disabled {
 }
 
 .history li span {
-  font-size: 12px;
+  display: block;
+  font-size: 11px;
   color: #5f6368;
 }
 
@@ -165,7 +185,7 @@ button:disabled {
   border-radius: 999px;
   background: #e6f4ea;
   color: #1e7b34;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   padding: 2px 8px;
   margin-top: 6px;
