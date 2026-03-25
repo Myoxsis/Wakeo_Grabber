@@ -48,12 +48,26 @@ const queryActiveTab = () =>
 
 const sendRuntimeMessage = (message) =>
   new Promise((resolve) => {
-    chrome.runtime.sendMessage(message, resolve);
+    chrome.runtime.sendMessage(message, (response) => {
+      if (chrome.runtime.lastError) {
+        resolve({ ok: false, reason: chrome.runtime.lastError.message });
+        return;
+      }
+
+      resolve(response);
+    });
   });
 
 const sendTabMessage = (tabId, message) =>
   new Promise((resolve) => {
-    chrome.tabs.sendMessage(tabId, message, resolve);
+    chrome.tabs.sendMessage(tabId, message, (response) => {
+      if (chrome.runtime.lastError) {
+        resolve({ ok: false, reason: chrome.runtime.lastError.message });
+        return;
+      }
+
+      resolve(response);
+    });
   });
 
 const areAllCapturesSelected = (captures) =>

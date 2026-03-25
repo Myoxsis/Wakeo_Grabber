@@ -13,12 +13,24 @@
   "background": {
     "service_worker": "background.js"
   },
-  "permissions": ["storage", "activeTab", "tabs", "sidePanel"],
-  "host_permissions": ["*://app.wakeo.co/*"],
+  "permissions": [
+    "storage",
+    "activeTab",
+    "tabs",
+    "sidePanel",
+    "scripting"
+  ],
+  "host_permissions": [
+    "*://app.wakeo.co/*"
+  ],
   "content_scripts": [
     {
-      "matches": ["*://app.wakeo.co/*"],
-      "js": ["content.js"],
+      "matches": [
+        "*://app.wakeo.co/*"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_idle"
     }
   ]
