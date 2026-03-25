@@ -20,9 +20,18 @@ const isWakeoUrl = (url = "") => {
   }
 };
 
-const toLinkEntry = (url, source) => {
+const isShipmentUrl = (url = "") => {
   const canonicalUrl = normalizeUrl(url);
   if (!canonicalUrl || !isWakeoUrl(canonicalUrl)) {
+    return false;
+  }
+
+  return canonicalUrl.toLowerCase().includes("shipment");
+};
+
+const toLinkEntry = (url, source) => {
+  const canonicalUrl = normalizeUrl(url);
+  if (!canonicalUrl || !isShipmentUrl(canonicalUrl)) {
     return null;
   }
 
@@ -75,6 +84,43 @@ const collectWakeoLinks = () => {
   });
 
   return links;
+};
+
+const pushCapturedLinks = () => {
+  if (!isWakeoUrl(window.location.href)) {
+    return;
+  }
+
+  const links = collectWakeoLinks();
+  chrome.runtime.sendMessage({ type: "capture-links", payload: { links } });
+};
+
+let recordIntervalId = null;
+
+const stopContinuousCapture = () => {
+  if (!recordIntervalId) {
+    return;
+  }
+
+  clearInterval(recordIntervalId);
+  recordIntervalId = null;
+};
+
+const startContinuousCapture = () => {
+  stopContinuousCapture();
+  pushCapturedLinks();
+  recordIntervalId = setInterval(() => {
+    pushCapturedLinks();
+  }, 3000);
+};
+
+const setContinuousCapture = (recording) => {
+  if (recording) {
+    startContinuousCapture();
+    return;
+  }
+
+  stopContinuousCapture();
 };
 
 const collectShipmentFetchData = async () => {
@@ -168,4 +214,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   return false;
+});
+
+chrome.storage.local.get({ recording: false }, (data) => {
+  setContinuousCapture(Boolean(data.recording));
+});
+
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName !== "local" || !changes.recording) {
+    return;
+  }
+
+  setContinuousCapture(Boolean(changes.recording.newValue));
 });
