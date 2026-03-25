@@ -44,8 +44,31 @@ const toLinkEntry = (url, source) => {
 };
 
 const collectWakeoLinks = () => {
-  const pageEntry = toLinkEntry(window.location.href, "page");
-  return pageEntry ? [pageEntry] : [];
+  const linkMap = new Map();
+
+  const addEntry = (url, source) => {
+    const entry = toLinkEntry(url, source);
+    if (!entry) {
+      return;
+    }
+
+    linkMap.set(entry.canonicalUrl, entry);
+  };
+
+  addEntry(window.location.href, "page");
+
+  document.querySelectorAll("a[href]").forEach((anchor) => {
+    addEntry(anchor.href, "dom-link");
+  });
+
+  performance
+    .getEntriesByType("resource")
+    .filter((entry) => entry?.name)
+    .forEach((entry) => {
+      addEntry(entry.name, "network-resource");
+    });
+
+  return [...linkMap.values()];
 };
 
 const pushCapturedLinks = () => {
@@ -86,7 +109,7 @@ const setContinuousCapture = (recording) => {
 };
 
 const collectShipmentFetchData = async () => {
-  if (!window.location.pathname.startsWith("/shipment")) {
+  if (!isShipmentUrl(window.location.href)) {
     return [];
   }
 
