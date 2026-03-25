@@ -213,12 +213,19 @@ const collectShipmentFetchData = async () => {
 
 const isWakeoApiUrl = (url = "") => {
   const canonicalUrl = normalizeUrl(url);
-  if (!canonicalUrl || !isWakeoUrl(canonicalUrl)) {
+  if (!canonicalUrl) {
     return false;
   }
 
-  const pathname = new URL(canonicalUrl).pathname.toLowerCase();
-  return pathname.startsWith("/api/");
+  try {
+    const parsed = new URL(canonicalUrl);
+    const hostname = parsed.hostname.toLowerCase();
+    const pathname = parsed.pathname.toLowerCase();
+    const isSupportedHost = hostname === "app.wakeo.co" || hostname === "internal.api.wakeo.co";
+    return isSupportedHost && pathname.startsWith("/api/");
+  } catch (error) {
+    return false;
+  }
 };
 
 const toPageHookFetchEntry = (payload) => {

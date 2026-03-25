@@ -29,7 +29,10 @@
 
     try {
       const parsed = new URL(url, window.location.origin);
-      return parsed.hostname === "app.wakeo.co" && parsed.pathname.toLowerCase().startsWith("/api/");
+      const hostname = parsed.hostname.toLowerCase();
+      const pathname = parsed.pathname.toLowerCase();
+      const isSupportedHost = hostname === "app.wakeo.co" || hostname === "internal.api.wakeo.co";
+      return isSupportedHost && pathname.startsWith("/api/");
     } catch (error) {
       return false;
     }
