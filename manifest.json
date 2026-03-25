@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Wakeo Grabber",
   "version": "0.2.0",
-  "description": "Capture Wakeo.com links from page and network requests.",
+  "description": "Capture app.wakeo.co links from page and network requests.",
   "action": {
     "default_title": "Wakeo Grabber",
     "default_popup": "popup.html"
@@ -14,10 +14,10 @@
     "service_worker": "background.js"
   },
   "permissions": ["storage", "activeTab", "tabs", "sidePanel"],
-  "host_permissions": ["*://*.wakeo.com/*", "*://wakeo.com/*"],
+  "host_permissions": ["*://app.wakeo.co/*"],
   "content_scripts": [
     {
-      "matches": ["*://*.wakeo.com/*", "*://wakeo.com/*"],
+      "matches": ["*://app.wakeo.co/*"],
       "js": ["content.js"],
       "run_at": "document_idle"
     }

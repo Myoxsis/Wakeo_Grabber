@@ -16,7 +16,7 @@ const normalizeUrl = (url = "") => {
 const isWakeoUrl = (url = "") => {
   try {
     const parsed = new URL(url);
-    return parsed.hostname === "wakeo.com" || parsed.hostname.endsWith(".wakeo.com");
+    return parsed.hostname === "app.wakeo.co";
   } catch (error) {
     return false;
   }
