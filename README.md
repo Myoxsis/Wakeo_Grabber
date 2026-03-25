@@ -1,5 +1,5 @@
 # Wakeo Grabber
-Chrome extension to capture only `wakeo.com` links from:
+Chrome extension to capture only `app.wakeo.co` links from:
 - the current page URL,
 - links present in the DOM,
 - and network resources visible through DevTools-like `performance` entries.
