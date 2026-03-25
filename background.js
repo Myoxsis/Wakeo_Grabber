@@ -77,7 +77,14 @@ const injectMainWorldHook = (tabId) =>
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.storage.local.set(STORAGE_DEFAULTS);
+
+  try {
+    chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+  } catch (error) {
+    // Ignore side panel behavior setup failures.
+  }
 });
+
 
 const captureTab = async (tabId, reason = "auto") => {
   await injectMainWorldHook(tabId);

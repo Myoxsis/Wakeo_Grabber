@@ -2,6 +2,7 @@ const historyList = document.getElementById("history");
 const contentHistoryList = document.getElementById("content-history");
 const recordButton = document.getElementById("record");
 const captureNowButton = document.getElementById("capture-now");
+const autoProcessButton = document.getElementById("auto-process");
 const clearButton = document.getElementById("clear");
 const selectAllButton = document.getElementById("select-all");
 const deleteSelectedButton = document.getElementById("delete-selected");
@@ -12,6 +13,9 @@ const selectedContentOutput = document.getElementById("selected-content-output")
 const copySelectedButton = document.getElementById("copy-selected");
 const captureCountPill = document.getElementById("capture-count");
 const selectionCountPill = document.getElementById("selection-count");
+const contentCountPill = document.getElementById("content-count");
+const tabButtons = [...document.querySelectorAll(".tab")];
+const tabPanels = [...document.querySelectorAll(".tab-panel")];
 
 let selectedUrls = new Set();
 
@@ -70,6 +74,8 @@ const sendTabMessage = (tabId, message) =>
     });
   });
 
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 const areAllCapturesSelected = (captures) =>
   captures.length > 0 &&
   captures.every((item) => selectedUrls.has(item.canonicalUrl || normalizeUrl(item.url)));
@@ -80,9 +86,10 @@ const setRecordingUi = (recording) => {
   recordButton.classList.toggle("ghost", recording);
 };
 
-const setStatsUi = (captures) => {
+const setStatsUi = (captures, capturedContent = []) => {
   captureCountPill.textContent = `${captures.length} link${captures.length === 1 ? "" : "s"}`;
   selectionCountPill.textContent = `${selectedUrls.size} selected`;
+  contentCountPill.textContent = `${capturedContent.length} payload${capturedContent.length === 1 ? "" : "s"}`;
 };
 
 const setSelectionButtonsUi = (captures) => {
@@ -92,6 +99,7 @@ const setSelectionButtonsUi = (captures) => {
 
   deleteSelectedButton.disabled = !hasSelection;
   downloadSelectedButton.disabled = !hasSelection;
+  autoProcessButton.disabled = !hasSelection;
   selectAllButton.disabled = !hasItems;
   clearButton.disabled = !hasItems;
   selectAllButton.textContent = allSelected ? "Deselect all" : "Select all";
@@ -132,10 +140,9 @@ const renderHistory = (items) => {
   if (!items.length) {
     const emptyState = document.createElement("li");
     emptyState.className = "empty";
-    emptyState.textContent = "No shipment links yet. Open Wakeo and capture.";
+    emptyState.textContent = "No shipment links in queue.";
     historyList.appendChild(emptyState);
     hideSelectedContent();
-    setStatsUi(items);
     setSelectionButtonsUi(items);
     return;
   }
@@ -173,17 +180,9 @@ const renderHistory = (items) => {
     entry.appendChild(row);
     entry.appendChild(meta);
 
-    if (item.source === "shipments-list") {
-      const badge = document.createElement("span");
-      badge.className = "history__badge";
-      badge.textContent = "Captured from shipments page";
-      entry.appendChild(badge);
-    }
-
     historyList.appendChild(entry);
   });
 
-  setStatsUi(items);
   setSelectionButtonsUi(items);
 };
 
@@ -193,7 +192,7 @@ const renderCapturedContent = (items) => {
   if (!items.length) {
     const emptyState = document.createElement("li");
     emptyState.className = "empty";
-    emptyState.textContent = "No shipment content yet. Open a shipment link while recording.";
+    emptyState.textContent = "No shipment content yet.";
     contentHistoryList.appendChild(emptyState);
     return;
   }
@@ -212,15 +211,9 @@ const renderCapturedContent = (items) => {
     const request = document.createElement("span");
     request.textContent = `Request: ${item.requestUrl}`;
 
-    const content = document.createElement("textarea");
-    content.className = "selected-content__output";
-    content.readOnly = true;
-    content.value = JSON.stringify(item.data, null, 2);
-
     entry.appendChild(pageLink);
     entry.appendChild(meta);
     entry.appendChild(request);
-    entry.appendChild(content);
     contentHistoryList.appendChild(entry);
   });
 };
@@ -233,6 +226,7 @@ const refreshHistory = async () => {
   selectedUrls = new Set([...selectedUrls].filter((key) => validKeys.has(key)));
   renderHistory(captures);
   renderCapturedContent(capturedContent);
+  setStatsUi(captures, capturedContent);
 };
 
 const captureCurrentTab = async (reason) => {
@@ -242,6 +236,38 @@ const captureCurrentTab = async (reason) => {
   }
 
   await sendTabMessage(tab.id, { type: "capture-request", reason });
+  await refreshHistory();
+};
+
+const processQueue = async () => {
+  const data = await storageGet({ capturedLinks: [] });
+  const captures = getSelectedCaptures(data.capturedLinks || []);
+
+  if (!captures.length) {
+    return;
+  }
+
+  autoProcessButton.disabled = true;
+  autoProcessButton.textContent = "Processing...";
+
+  for (const capture of captures) {
+    await new Promise((resolve) => {
+      chrome.tabs.create({ url: capture.url, active: false }, (tab) => {
+        const waitTime = 1200 + Math.round(Math.random() * 1800);
+        setTimeout(() => {
+          if (tab?.id) {
+            chrome.tabs.remove(tab.id, () => resolve());
+            return;
+          }
+          resolve();
+        }, waitTime);
+      });
+    });
+
+    await delay(500 + Math.round(Math.random() * 900));
+  }
+
+  autoProcessButton.textContent = "Auto process queue";
   await refreshHistory();
 };
 
@@ -258,10 +284,8 @@ const toggleRecording = async () => {
 };
 
 recordButton.addEventListener("click", toggleRecording);
-
-captureNowButton.addEventListener("click", () => {
-  captureCurrentTab("manual");
-});
+captureNowButton.addEventListener("click", () => captureCurrentTab("manual"));
+autoProcessButton.addEventListener("click", processQueue);
 
 clearButton.addEventListener("click", async () => {
   if (!confirm("Clear all captured links?")) {
@@ -284,6 +308,7 @@ selectAllButton.addEventListener("click", async () => {
     : new Set();
 
   renderHistory(captures);
+  setStatsUi(captures);
 });
 
 deleteSelectedButton.addEventListener("click", async () => {
@@ -344,6 +369,16 @@ lockRightCheckbox.addEventListener("change", async () => {
   }
 });
 
+tabButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    const tab = button.dataset.tab;
+    tabButtons.forEach((node) => node.classList.toggle("is-active", node === button));
+    tabPanels.forEach((panel) => {
+      panel.hidden = panel.dataset.panel !== tab;
+    });
+  });
+});
+
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== "local" || (!changes.capturedLinks && !changes.capturedFetchData)) {
     return;
@@ -356,7 +391,9 @@ const initialize = async () => {
   const data = await storageGet({ recording: false, lockRightSide: false });
   setRecordingUi(data.recording);
   lockRightCheckbox.checked = data.lockRightSide;
-  refreshHistory();
+  await refreshHistory();
+
+  setInterval(refreshHistory, 1500);
 };
 
 initialize();

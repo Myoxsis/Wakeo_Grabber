@@ -10,56 +10,70 @@
     <main class="popup">
       <header class="popup__header">
         <h1>Wakeo Grabber</h1>
-        <p>Capture Wakeo.com links from page + network requests.</p>
+        <p>Side-panel workflow inspired by Geneanet Explorer.</p>
       </header>
 
       <section class="popup__stats" aria-live="polite">
         <span id="capture-count" class="stat-pill">0 links</span>
         <span id="selection-count" class="stat-pill">0 selected</span>
+        <span id="content-count" class="stat-pill">0 payloads</span>
       </section>
 
-      <section class="popup__actions">
+      <section class="popup__actions popup__actions--top">
         <button id="record" class="primary">Start recording</button>
         <button id="capture-now" class="ghost">Capture now</button>
+        <button id="auto-process" class="ghost">Auto process queue</button>
       </section>
 
-      <section class="popup__actions">
-        <button id="select-all" class="ghost">Select all</button>
-        <button id="delete-selected" class="ghost">Delete selected</button>
+      <nav class="tabs" aria-label="Panel sections">
+        <button class="tab is-active" data-tab="links">Pending links</button>
+        <button class="tab" data-tab="content">Captured content</button>
+        <button class="tab" data-tab="export">Export</button>
+      </nav>
+
+      <section class="tab-panel" data-panel="links">
+        <section class="popup__actions">
+          <button id="select-all" class="ghost">Select all</button>
+          <button id="delete-selected" class="ghost">Delete selected</button>
+        </section>
+
+        <section class="popup__history" aria-live="polite">
+          <h2>Pending shipment links</h2>
+          <ul id="history" class="history"></ul>
+        </section>
       </section>
 
-      <section class="popup__actions">
-        <button id="download-selected" class="ghost">Export selected JSON</button>
-        <button id="clear" class="ghost">Clear all</button>
+      <section class="tab-panel" data-panel="content" hidden>
+        <section class="popup__history" aria-live="polite">
+          <h2>Captured shipment content</h2>
+          <ul id="content-history" class="history"></ul>
+        </section>
       </section>
 
-      <section id="selected-content" class="selected-content" hidden>
-        <div class="selected-content__header">
-          <h2>Selected content</h2>
-          <button id="copy-selected" class="ghost" type="button">Copy</button>
-        </div>
-        <textarea
-          id="selected-content-output"
-          class="selected-content__output"
-          readonly
-          aria-label="Selected captured content"
-        ></textarea>
+      <section class="tab-panel" data-panel="export" hidden>
+        <section class="popup__actions">
+          <button id="download-selected" class="ghost">Export selected JSON</button>
+          <button id="clear" class="ghost">Clear all</button>
+        </section>
+
+        <section id="selected-content" class="selected-content" hidden>
+          <div class="selected-content__header">
+            <h2>Selected content</h2>
+            <button id="copy-selected" class="ghost" type="button">Copy</button>
+          </div>
+          <textarea
+            id="selected-content-output"
+            class="selected-content__output"
+            readonly
+            aria-label="Selected captured content"
+          ></textarea>
+        </section>
       </section>
 
       <label class="lock-toggle">
         <input id="lock-right" type="checkbox" />
-        <span>Lock popup on the right side (open side panel)</span>
+        <span>Open from extension icon in right side panel</span>
       </label>
-
-      <section class="popup__history" aria-live="polite">
-        <h2>Captured shipment links</h2>
-        <ul id="history" class="history"></ul>
-      </section>
-
-      <section class="popup__history" aria-live="polite">
-        <h2>Captured shipment content</h2>
-        <ul id="content-history" class="history"></ul>
-      </section>
     </main>
 
     <script src="popup.js"></script>
