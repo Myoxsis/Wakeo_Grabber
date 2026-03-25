@@ -43,47 +43,9 @@ const toLinkEntry = (url, source) => {
   };
 };
 
-const collectShipmentLinksFromShipmentsPage = () => {
-  if (!window.location.pathname.startsWith("/shipments")) {
-    return [];
-  }
-
-  const links = [];
-  document.querySelectorAll('a[href^="/shipment"]').forEach((anchor) => {
-    const absoluteUrl = new URL(anchor.getAttribute("href"), window.location.origin).toString();
-    const entry = toLinkEntry(absoluteUrl, "shipments-list");
-    if (entry) {
-      links.push(entry);
-    }
-  });
-
-  return links;
-};
-
 const collectWakeoLinks = () => {
-  const links = [];
-  const pushLink = (url, source) => {
-    const entry = toLinkEntry(url, source);
-    if (entry) {
-      links.push(entry);
-    }
-  };
-
-  pushLink(window.location.href, "page");
-
-  document.querySelectorAll("a[href]").forEach((anchor) => {
-    pushLink(anchor.href, "dom");
-  });
-
-  collectShipmentLinksFromShipmentsPage().forEach((entry) => links.push(entry));
-
-  performance.getEntriesByType("resource").forEach((entry) => {
-    if (entry?.name) {
-      pushLink(entry.name, "network");
-    }
-  });
-
-  return links;
+  const pageEntry = toLinkEntry(window.location.href, "page");
+  return pageEntry ? [pageEntry] : [];
 };
 
 const pushCapturedLinks = () => {
