@@ -13,6 +13,21 @@ const normalizeUrl = (url = "") => {
 
 const PAGE_HOOK_EVENT = "wakeo-grabber-network-capture";
 
+const hasActiveExtensionContext = () => Boolean(chrome?.runtime?.id);
+
+const withActiveExtensionContext = (callback) => {
+  if (!hasActiveExtensionContext()) {
+    return false;
+  }
+
+  try {
+    callback();
+    return true;
+  } catch (error) {
+    return false;
+  }
+};
+
 const isWakeoUrl = (url = "") => {
   try {
     const parsed = new URL(url);
@@ -263,7 +278,12 @@ if (isWakeoUrl(window.location.href)) {
   window.addEventListener(PAGE_HOOK_EVENT, handlePageHookEvent);
 }
 
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+const onRuntimeMessage = (message, sender, sendResponse) => {
+  if (!hasActiveExtensionContext()) {
+    sendResponse({ ok: false, reason: "extension-context-invalidated" });
+    return false;
+  }
+
   if (message.type === "capture-request") {
     if (!isWakeoUrl(window.location.href)) {
       sendResponse({ ok: true, skipped: true, reason: "not-wakeo" });
@@ -290,16 +310,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   return false;
-});
+};
 
-chrome.storage.local.get({ recording: false }, (data) => {
-  setContinuousCapture(Boolean(data.recording));
-});
+withActiveExtensionContext(() => {
+  chrome.runtime.onMessage.addListener(onRuntimeMessage);
 
-chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName !== "local" || !changes.recording) {
-    return;
-  }
+  chrome.storage.local.get({ recording: false }, (data) => {
+    setContinuousCapture(Boolean(data.recording));
+  });
 
-  setContinuousCapture(Boolean(changes.recording.newValue));
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName !== "local" || !changes.recording) {
+      return;
+    }
+
+    setContinuousCapture(Boolean(changes.recording.newValue));
+  });
 });
