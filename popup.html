@@ -8,87 +8,92 @@
   </head>
   <body>
     <main class="popup">
-      <header class="popup__header">
-        <h1>Wakeo Grabber</h1>
-        <p>Side-panel workflow inspired by Geneanet Explorer.</p>
+      <header class="popup__header panel">
+        <div>
+          <p class="eyebrow">Shipment capture workspace</p>
+          <h1>Wakeo Grabber</h1>
+          <p>Capture, review, and export shipment links from a cleaner side-panel workflow.</p>
+        </div>
       </header>
 
-      <section class="popup__stats" aria-live="polite">
+      <section class="popup__stats panel" aria-live="polite" aria-label="Capture summary">
         <span id="capture-count" class="stat-pill">0 links</span>
         <span id="selection-count" class="stat-pill">0 selected</span>
         <span id="content-count" class="stat-pill">0 payloads</span>
       </section>
 
-      <section class="popup__actions popup__actions--top">
+      <section class="popup__actions popup__actions--top panel" aria-label="Primary actions">
         <button id="record" class="primary">Start recording</button>
         <button id="capture-now" class="ghost">Capture now</button>
         <button id="auto-process" class="ghost">Auto process queue</button>
       </section>
 
-      <nav class="tabs" aria-label="Panel sections">
-        <button class="tab is-active" data-tab="links">Pending links</button>
-        <button class="tab" data-tab="content">Captured content</button>
-        <button class="tab" data-tab="export">Export</button>
-      </nav>
+      <section class="panel panel--flush">
+        <nav class="tabs" aria-label="Panel sections">
+          <button class="tab is-active" data-tab="links">Pending links</button>
+          <button class="tab" data-tab="content">Captured content</button>
+          <button class="tab" data-tab="export">Export</button>
+        </nav>
 
-      <section class="tab-panel" data-panel="links">
-        <section class="popup__actions">
-          <button id="select-all" class="ghost">Select all</button>
-          <button id="delete-selected" class="ghost">Delete selected</button>
+        <section class="tab-panel" data-panel="links">
+          <section class="popup__actions toolbar">
+            <button id="select-all" class="ghost">Select all</button>
+            <button id="delete-selected" class="ghost">Delete selected</button>
+          </section>
+
+          <section class="popup__history" aria-live="polite">
+            <h2>Pending shipment links</h2>
+            <ul id="history" class="history"></ul>
+          </section>
         </section>
 
-        <section class="popup__history" aria-live="polite">
-          <h2>Pending shipment links</h2>
-          <ul id="history" class="history"></ul>
+        <section class="tab-panel" data-panel="content" hidden>
+          <section class="popup__actions toolbar">
+            <button id="content-select-all" class="ghost">Select all content</button>
+            <button id="content-download-selected" class="ghost">Download selected content</button>
+          </section>
+
+          <section class="popup__history" aria-live="polite">
+            <h2>Captured shipment content</h2>
+            <ul id="content-history" class="history"></ul>
+          </section>
+
+          <section id="content-selected-preview" class="selected-content" hidden>
+            <div class="selected-content__header">
+              <h2>Selected captured shipment content</h2>
+              <button id="content-copy-selected" class="ghost" type="button">Copy</button>
+            </div>
+            <textarea
+              id="content-selected-output"
+              class="selected-content__output"
+              readonly
+              aria-label="Selected captured shipment content"
+            ></textarea>
+          </section>
+        </section>
+
+        <section class="tab-panel" data-panel="export" hidden>
+          <section class="popup__actions toolbar">
+            <button id="download-selected" class="ghost">Export selected JSON</button>
+            <button id="clear" class="ghost">Clear all</button>
+          </section>
+
+          <section id="selected-content" class="selected-content" hidden>
+            <div class="selected-content__header">
+              <h2>Selected content</h2>
+              <button id="copy-selected" class="ghost" type="button">Copy</button>
+            </div>
+            <textarea
+              id="selected-content-output"
+              class="selected-content__output"
+              readonly
+              aria-label="Selected captured content"
+            ></textarea>
+          </section>
         </section>
       </section>
 
-      <section class="tab-panel" data-panel="content" hidden>
-        <section class="popup__actions">
-          <button id="content-select-all" class="ghost">Select all content</button>
-          <button id="content-download-selected" class="ghost">Download selected content</button>
-        </section>
-
-        <section class="popup__history" aria-live="polite">
-          <h2>Captured shipment content</h2>
-          <ul id="content-history" class="history"></ul>
-        </section>
-
-        <section id="content-selected-preview" class="selected-content" hidden>
-          <div class="selected-content__header">
-            <h2>Selected captured shipment content</h2>
-            <button id="content-copy-selected" class="ghost" type="button">Copy</button>
-          </div>
-          <textarea
-            id="content-selected-output"
-            class="selected-content__output"
-            readonly
-            aria-label="Selected captured shipment content"
-          ></textarea>
-        </section>
-      </section>
-
-      <section class="tab-panel" data-panel="export" hidden>
-        <section class="popup__actions">
-          <button id="download-selected" class="ghost">Export selected JSON</button>
-          <button id="clear" class="ghost">Clear all</button>
-        </section>
-
-        <section id="selected-content" class="selected-content" hidden>
-          <div class="selected-content__header">
-            <h2>Selected content</h2>
-            <button id="copy-selected" class="ghost" type="button">Copy</button>
-          </div>
-          <textarea
-            id="selected-content-output"
-            class="selected-content__output"
-            readonly
-            aria-label="Selected captured content"
-          ></textarea>
-        </section>
-      </section>
-
-      <label class="lock-toggle">
+      <label class="lock-toggle panel">
         <input id="lock-right" type="checkbox" />
         <span>Open from extension icon in right side panel</span>
       </label>
