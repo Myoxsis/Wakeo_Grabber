@@ -29,6 +29,16 @@
         "*://app.wakeo.co/*"
       ],
       "js": [
+        "page-hook.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "*://app.wakeo.co/*"
+      ],
+      "js": [
         "content.js"
       ],
       "run_at": "document_idle"
