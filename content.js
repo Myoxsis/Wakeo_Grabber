@@ -157,7 +157,7 @@ const collectShipmentFetchData = async () => {
     .map((entry) => entry.name)
     .filter((url) => {
       const normalized = normalizeUrl(url);
-      return normalized && isWakeoUrl(normalized) && normalized.includes("/shipment");
+      return normalized && isWakeoApiUrl(normalized);
     })
     .filter((url) => {
       const canonical = normalizeUrl(url);
@@ -206,19 +206,19 @@ const collectShipmentFetchData = async () => {
   return fetchData.filter(Boolean);
 };
 
-const isShipmentApiUrl = (url = "") => {
+const isWakeoApiUrl = (url = "") => {
   const canonicalUrl = normalizeUrl(url);
   if (!canonicalUrl || !isWakeoUrl(canonicalUrl)) {
     return false;
   }
 
-  const lowerUrl = canonicalUrl.toLowerCase();
-  return lowerUrl.includes("/shipment") || lowerUrl.includes("/shipments");
+  const pathname = new URL(canonicalUrl).pathname.toLowerCase();
+  return pathname.startsWith("/api/");
 };
 
 const toPageHookFetchEntry = (payload) => {
   const requestUrl = normalizeUrl(payload?.requestUrl);
-  if (!requestUrl || !isShipmentApiUrl(requestUrl)) {
+  if (!requestUrl || !isWakeoApiUrl(requestUrl)) {
     return null;
   }
 
