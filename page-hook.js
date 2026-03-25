@@ -22,25 +22,21 @@
     }
   };
 
-  const isShipmentEndpoint = (url) => {
+  const isWakeoApiEndpoint = (url) => {
     if (!url || typeof url !== "string") {
       return false;
     }
 
     try {
       const parsed = new URL(url, window.location.origin);
-      const normalized = parsed.toString().toLowerCase();
-      return (
-        parsed.hostname === "app.wakeo.co" &&
-        (normalized.includes("/shipment") || normalized.includes("/shipments"))
-      );
+      return parsed.hostname === "app.wakeo.co" && parsed.pathname.toLowerCase().startsWith("/api/");
     } catch (error) {
       return false;
     }
   };
 
   const shouldCapture = (response, requestUrl) => {
-    if (!response || !response.ok || !isShipmentEndpoint(requestUrl)) {
+    if (!response || !response.ok || !isWakeoApiEndpoint(requestUrl)) {
       return false;
     }
 
@@ -87,7 +83,7 @@
     this.addEventListener("load", () => {
       try {
         const requestUrl = this.responseURL || this.__wakeoGrabberRequestUrl || "";
-        if (!isShipmentEndpoint(requestUrl) || this.status < 200 || this.status >= 300) {
+        if (!isWakeoApiEndpoint(requestUrl) || this.status < 200 || this.status >= 300) {
           return;
         }
 
