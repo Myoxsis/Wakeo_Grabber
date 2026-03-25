@@ -32,6 +32,19 @@ body {
   color: #5f6368;
 }
 
+.popup__stats {
+  display: flex;
+  gap: 8px;
+}
+
+.stat-pill {
+  font-size: 12px;
+  color: #334155;
+  background: #e8eefb;
+  border-radius: 999px;
+  padding: 4px 10px;
+}
+
 .popup__actions {
   display: grid;
   grid-template-columns: 1fr 1fr;

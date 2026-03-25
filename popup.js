@@ -9,6 +9,8 @@ const lockRightCheckbox = document.getElementById("lock-right");
 const selectedContentSection = document.getElementById("selected-content");
 const selectedContentOutput = document.getElementById("selected-content-output");
 const copySelectedButton = document.getElementById("copy-selected");
+const captureCountPill = document.getElementById("capture-count");
+const selectionCountPill = document.getElementById("selection-count");
 
 let selectedUrls = new Set();
 
@@ -16,6 +18,7 @@ const normalizeUrl = (url = "") => {
   if (!url) {
     return null;
   }
+
   try {
     const parsed = new URL(url);
     parsed.hash = "";
@@ -25,6 +28,33 @@ const normalizeUrl = (url = "") => {
   }
 };
 
+const storageGet = (defaults) =>
+  new Promise((resolve) => {
+    chrome.storage.local.get(defaults, resolve);
+  });
+
+const storageSet = (value) =>
+  new Promise((resolve) => {
+    chrome.storage.local.set(value, resolve);
+  });
+
+const queryActiveTab = () =>
+  new Promise((resolve) => {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      resolve(tabs[0]);
+    });
+  });
+
+const sendRuntimeMessage = (message) =>
+  new Promise((resolve) => {
+    chrome.runtime.sendMessage(message, resolve);
+  });
+
+const sendTabMessage = (tabId, message) =>
+  new Promise((resolve) => {
+    chrome.tabs.sendMessage(tabId, message, resolve);
+  });
+
 const areAllCapturesSelected = (captures) =>
   captures.length > 0 &&
   captures.every((item) => selectedUrls.has(item.canonicalUrl || normalizeUrl(item.url)));
@@ -33,6 +63,11 @@ const setRecordingUi = (recording) => {
   recordButton.textContent = recording ? "Stop recording" : "Start recording";
   recordButton.classList.toggle("primary", !recording);
   recordButton.classList.toggle("ghost", recording);
+};
+
+const setStatsUi = (captures) => {
+  captureCountPill.textContent = `${captures.length} link${captures.length === 1 ? "" : "s"}`;
+  selectionCountPill.textContent = `${selectedUrls.size} selected`;
 };
 
 const setSelectionButtonsUi = (captures) => {
@@ -58,6 +93,24 @@ const showSelectedContent = (content) => {
   selectedContentOutput.select();
 };
 
+const hideSelectedContent = () => {
+  selectedContentSection.hidden = true;
+  selectedContentOutput.value = "";
+};
+
+const downloadJsonFile = (content) => {
+  const blob = new Blob([content], { type: "application/json" });
+  const blobUrl = URL.createObjectURL(blob);
+  const downloadLink = document.createElement("a");
+  const now = new Date().toISOString().replace(/[.:]/g, "-");
+
+  downloadLink.href = blobUrl;
+  downloadLink.download = `wakeo-capture-${now}.json`;
+  downloadLink.click();
+
+  URL.revokeObjectURL(blobUrl);
+};
+
 const renderHistory = (items) => {
   historyList.innerHTML = "";
 
@@ -66,6 +119,8 @@ const renderHistory = (items) => {
     emptyState.className = "empty";
     emptyState.textContent = "No Wakeo links yet. Open Wakeo.com and capture.";
     historyList.appendChild(emptyState);
+    hideSelectedContent();
+    setStatsUi(items);
     setSelectionButtonsUi(items);
     return;
   }
@@ -86,6 +141,7 @@ const renderHistory = (items) => {
       } else {
         selectedUrls.delete(key);
       }
+      setStatsUi(items);
       setSelectionButtonsUi(items);
     });
 
@@ -104,42 +160,38 @@ const renderHistory = (items) => {
     historyList.appendChild(entry);
   });
 
+  setStatsUi(items);
   setSelectionButtonsUi(items);
 };
 
-const refreshHistory = () => {
-  chrome.storage.local.get({ capturedLinks: [] }, (data) => {
-    const captures = data.capturedLinks || [];
-    const validKeys = new Set(captures.map((item) => item.canonicalUrl || normalizeUrl(item.url)));
-    selectedUrls = new Set([...selectedUrls].filter((key) => validKeys.has(key)));
-    renderHistory(captures);
-  });
+const refreshHistory = async () => {
+  const data = await storageGet({ capturedLinks: [] });
+  const captures = data.capturedLinks || [];
+  const validKeys = new Set(captures.map((item) => item.canonicalUrl || normalizeUrl(item.url)));
+  selectedUrls = new Set([...selectedUrls].filter((key) => validKeys.has(key)));
+  renderHistory(captures);
 };
 
 const captureCurrentTab = async (reason) => {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const tab = await queryActiveTab();
   if (!tab?.id) {
     return;
   }
 
-  chrome.tabs.sendMessage(tab.id, { type: "capture-request", reason }, () => {
-    refreshHistory();
-  });
+  await sendTabMessage(tab.id, { type: "capture-request", reason });
+  await refreshHistory();
 };
 
-const toggleRecording = () => {
-  chrome.storage.local.get({ recording: false }, (data) => {
-    const nextRecording = !data.recording;
-    chrome.runtime.sendMessage(
-      { type: "set-recording", payload: { recording: nextRecording } },
-      () => {
-        setRecordingUi(nextRecording);
-        if (nextRecording) {
-          captureCurrentTab("manual");
-        }
-      }
-    );
-  });
+const toggleRecording = async () => {
+  const data = await storageGet({ recording: false });
+  const nextRecording = !data.recording;
+
+  await sendRuntimeMessage({ type: "set-recording", payload: { recording: nextRecording } });
+  setRecordingUi(nextRecording);
+
+  if (nextRecording) {
+    captureCurrentTab("manual");
+  }
 };
 
 recordButton.addEventListener("click", toggleRecording);
@@ -148,49 +200,57 @@ captureNowButton.addEventListener("click", () => {
   captureCurrentTab("manual");
 });
 
-clearButton.addEventListener("click", () => {
-  chrome.storage.local.set({ capturedLinks: [] }, () => {
-    selectedUrls.clear();
-    refreshHistory();
-  });
+clearButton.addEventListener("click", async () => {
+  if (!confirm("Clear all captured links?")) {
+    return;
+  }
+
+  await storageSet({ capturedLinks: [] });
+  selectedUrls.clear();
+  hideSelectedContent();
+  refreshHistory();
 });
 
-selectAllButton.addEventListener("click", () => {
-  chrome.storage.local.get({ capturedLinks: [] }, (data) => {
-    const captures = data.capturedLinks || [];
-    const shouldSelectAll = !areAllCapturesSelected(captures);
+selectAllButton.addEventListener("click", async () => {
+  const data = await storageGet({ capturedLinks: [] });
+  const captures = data.capturedLinks || [];
+  const shouldSelectAll = !areAllCapturesSelected(captures);
 
-    selectedUrls = shouldSelectAll
-      ? new Set(captures.map((item) => item.canonicalUrl || normalizeUrl(item.url)))
-      : new Set();
+  selectedUrls = shouldSelectAll
+    ? new Set(captures.map((item) => item.canonicalUrl || normalizeUrl(item.url)))
+    : new Set();
 
-    renderHistory(captures);
-  });
+  renderHistory(captures);
 });
 
-deleteSelectedButton.addEventListener("click", () => {
-  chrome.storage.local.get({ capturedLinks: [] }, (data) => {
-    const captures = data.capturedLinks || [];
-    const filtered = captures.filter(
-      (item) => !selectedUrls.has(item.canonicalUrl || normalizeUrl(item.url))
-    );
-    chrome.storage.local.set({ capturedLinks: filtered }, () => {
-      selectedUrls.clear();
-      refreshHistory();
-    });
-  });
+deleteSelectedButton.addEventListener("click", async () => {
+  if (!selectedUrls.size || !confirm("Delete selected links?")) {
+    return;
+  }
+
+  const data = await storageGet({ capturedLinks: [] });
+  const captures = data.capturedLinks || [];
+  const filtered = captures.filter(
+    (item) => !selectedUrls.has(item.canonicalUrl || normalizeUrl(item.url))
+  );
+
+  await storageSet({ capturedLinks: filtered });
+  selectedUrls.clear();
+  hideSelectedContent();
+  refreshHistory();
 });
 
-downloadSelectedButton.addEventListener("click", () => {
-  chrome.storage.local.get({ capturedLinks: [] }, (data) => {
-    const captures = data.capturedLinks || [];
-    const selected = getSelectedCaptures(captures);
-    if (!selected.length) {
-      return;
-    }
+downloadSelectedButton.addEventListener("click", async () => {
+  const data = await storageGet({ capturedLinks: [] });
+  const captures = data.capturedLinks || [];
+  const selected = getSelectedCaptures(captures);
+  if (!selected.length) {
+    return;
+  }
 
-    showSelectedContent(JSON.stringify(selected, null, 2));
-  });
+  const content = JSON.stringify(selected, null, 2);
+  showSelectedContent(content);
+  downloadJsonFile(content);
 });
 
 copySelectedButton.addEventListener("click", async () => {
@@ -210,9 +270,9 @@ copySelectedButton.addEventListener("click", async () => {
   }
 });
 
-lockRightCheckbox.addEventListener("change", () => {
+lockRightCheckbox.addEventListener("change", async () => {
   const lockRightSide = lockRightCheckbox.checked;
-  chrome.runtime.sendMessage({ type: "set-lock-right-side", payload: { lockRightSide } });
+  await sendRuntimeMessage({ type: "set-lock-right-side", payload: { lockRightSide } });
 
   if (lockRightSide && chrome.sidePanel?.open) {
     chrome.windows.getCurrent((window) => {
@@ -221,9 +281,19 @@ lockRightCheckbox.addEventListener("change", () => {
   }
 });
 
-chrome.storage.local.get({ recording: false, lockRightSide: false }, (data) => {
-  setRecordingUi(data.recording);
-  lockRightCheckbox.checked = data.lockRightSide;
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName !== "local" || !changes.capturedLinks) {
+    return;
+  }
+
+  refreshHistory();
 });
 
-refreshHistory();
+const initialize = async () => {
+  const data = await storageGet({ recording: false, lockRightSide: false });
+  setRecordingUi(data.recording);
+  lockRightCheckbox.checked = data.lockRightSide;
+  refreshHistory();
+};
+
+initialize();
