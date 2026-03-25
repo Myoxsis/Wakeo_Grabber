@@ -242,9 +242,39 @@ const shouldReplaceCapturedPayload = (existingItem, incomingItem) => {
 };
 
 const mergeFetchData = (existingItems, incomingItems) => {
-  const getKey = (item) => `${item.pageUrl || ""}::${item.requestUrl || ""}`;
-  const indexByKey = new Map(existingItems.map((item, index) => [getKey(item), index]));
-  const merged = [...existingItems];
+  const merged = [];
+  const indexByKey = new Map();
+
+  existingItems.forEach((item) => {
+    const pageUrl = normalizeUrl(item.pageUrl);
+    const requestUrl = normalizeUrl(item.requestUrl);
+
+    if (!pageUrl || !requestUrl || !isWakeoUrl(pageUrl) || !isWakeoApiUrl(requestUrl)) {
+      return;
+    }
+
+    const normalizedItem = {
+      pageUrl,
+      requestUrl,
+      source: item.source || "network-json",
+      capturedAt: item.capturedAt || new Date().toISOString(),
+      data: item.data
+    };
+
+    const key = pageUrl;
+    const existingIndex = indexByKey.get(key);
+
+    if (existingIndex === undefined) {
+      merged.push(normalizedItem);
+      indexByKey.set(key, merged.length - 1);
+      return;
+    }
+
+    const existingItem = merged[existingIndex];
+    if (shouldReplaceCapturedPayload(existingItem, normalizedItem)) {
+      merged[existingIndex] = normalizedItem;
+    }
+  });
 
   incomingItems.forEach((item) => {
     const pageUrl = normalizeUrl(item.pageUrl);
@@ -262,7 +292,7 @@ const mergeFetchData = (existingItems, incomingItems) => {
       data: item.data
     };
 
-    const key = `${pageUrl}::${requestUrl}`;
+    const key = pageUrl;
     const existingIndex = indexByKey.get(key);
 
     if (existingIndex === undefined) {
