@@ -13,6 +13,23 @@
   --shadow: 0 8px 20px rgba(24, 39, 75, 0.08);
 }
 
+.material-symbols-rounded {
+  font-family: "Material Symbols Rounded";
+  font-weight: normal;
+  font-style: normal;
+  font-size: 18px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-smoothing: antialiased;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -49,6 +66,19 @@ body {
 
 .popup__header {
   background: linear-gradient(140deg, #ffffff, #f4f8ff);
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.panel-icon {
+  color: var(--primary);
+  background: var(--primary-soft);
+  border: 1px solid #d5e2ff;
+  border-radius: 10px;
+  min-width: 34px;
+  min-height: 34px;
+  font-size: 20px;
 }
 
 .eyebrow {
@@ -117,6 +147,10 @@ body {
   font-size: 12px;
   font-weight: 600;
   transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
 .tab.is-active {
@@ -163,6 +197,14 @@ button:disabled {
 .selected-content__header h2 {
   margin: 0 0 8px;
   font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.heading-icon {
+  font-size: 16px;
+  color: var(--primary);
 }
 
 .lock-toggle {
