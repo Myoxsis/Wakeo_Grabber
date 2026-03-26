@@ -155,14 +155,41 @@ const toPathText = (value) => {
   return null;
 };
 
+const extractPathValue = (value) => {
+  if (Array.isArray(value)) {
+    if (value.length && value.every((entry) => Array.isArray(entry))) {
+      return value.map((entry) => toPathText(entry)).find(Boolean) || null;
+    }
+
+    return toPathText(value);
+  }
+
+  return toPathText(value);
+};
+
+const getPathFromTransport = (transport) => {
+  if (!transport || typeof transport !== "object") {
+    return null;
+  }
+
+  return extractPathValue(transport.path);
+};
+
 const getTransportPathValues = (data) => {
-  if (!Array.isArray(data?.transports)) {
+  if (!data || typeof data !== "object") {
     return [];
   }
 
-  return data.transports
-    .map((transport) => toPathText(transport?.path))
-    .filter(Boolean);
+  const transportPaths = Array.isArray(data.transports)
+    ? data.transports.map((transport) => getPathFromTransport(transport)).filter(Boolean)
+    : [];
+
+  if (transportPaths.length) {
+    return transportPaths;
+  }
+
+  const rootPath = extractPathValue(data.path);
+  return rootPath ? [rootPath] : [];
 };
 
 const hasTransportPath = (item) => getTransportPathValues(item?.data).length > 0;
@@ -173,7 +200,7 @@ const filterPayloadToTransportsWithPath = (item) => {
     return item;
   }
 
-  const filteredTransports = transports.filter((transport) => toPathText(transport?.path));
+  const filteredTransports = transports.filter((transport) => getPathFromTransport(transport));
   return {
     ...item,
     data: {
