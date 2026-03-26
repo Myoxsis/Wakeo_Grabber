@@ -12,6 +12,8 @@ Chrome extension to capture only `app.wakeo.co` links from:
 - Shipment page network JSON capture from Wakeo API fetch/xhr resources, including `internal.api.wakeo.co` endpoints.
 - In-page fetch/XHR interception to capture the same shipment JSON payloads visible in DevTools network responses.
 - Dedicated section in popup to review captured shipment content payloads.
+- Path visibility for captured transports (shows path when present and non-empty).
+- Toggle filter to display only captured content that contains transports with non-empty path values.
 - Mass delete selected items.
 - Export selected items as JSON file + copy-ready preview.
 - Live counters for total captured links and current selection.
