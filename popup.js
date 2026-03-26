@@ -1,7 +1,9 @@
 const historyList = document.getElementById("history");
 const contentHistoryList = document.getElementById("content-history");
 const contentSelectAllButton = document.getElementById("content-select-all");
+const contentPreviewSelectedButton = document.getElementById("content-preview-selected");
 const contentDownloadSelectedButton = document.getElementById("content-download-selected");
+const contentDeleteSelectedButton = document.getElementById("content-delete-selected");
 const contentSelectedPreview = document.getElementById("content-selected-preview");
 const contentSelectedOutput = document.getElementById("content-selected-output");
 const contentCopySelectedButton = document.getElementById("content-copy-selected");
@@ -124,10 +126,15 @@ const setContentSelectionUi = (capturedContent) => {
   const allSelected = areAllContentSelected(capturedContent);
 
   contentSelectAllButton.disabled = !hasItems;
+  contentPreviewSelectedButton.disabled = !hasSelection;
   contentDownloadSelectedButton.disabled = !hasSelection;
+  contentDeleteSelectedButton.disabled = !hasSelection;
   contentSelectAllButton.textContent = allSelected ? "Deselect all content" : "Select all content";
   contentSelectAllButton.setAttribute("aria-pressed", allSelected ? "true" : "false");
 };
+
+const getSelectedCapturedContent = (capturedContent) =>
+  capturedContent.filter((item) => selectedContentKeys.has(getContentKey(item)));
 
 const getSelectedCaptures = (captures) =>
   captures.filter((item) => selectedUrls.has(item.canonicalUrl || normalizeUrl(item.url)));
@@ -248,6 +255,9 @@ const renderCapturedContent = (items) => {
         selectedContentKeys.add(key);
       } else {
         selectedContentKeys.delete(key);
+      }
+      if (!selectedContentKeys.size) {
+        hideSelectedCapturedContent();
       }
       setContentSelectionUi(items);
     });
@@ -433,15 +443,43 @@ contentSelectAllButton.addEventListener("click", async () => {
 contentDownloadSelectedButton.addEventListener("click", async () => {
   const data = await storageGet({ capturedFetchData: [] });
   const capturedContent = data.capturedFetchData || [];
-  const selectedContent = capturedContent.filter((item) => selectedContentKeys.has(getContentKey(item)));
+  const selectedContent = getSelectedCapturedContent(capturedContent);
 
   if (!selectedContent.length) {
     return;
   }
 
   const content = JSON.stringify(selectedContent, null, 2);
-  showSelectedCapturedContent(content);
   downloadJsonFile(content);
+});
+
+contentPreviewSelectedButton.addEventListener("click", async () => {
+  const data = await storageGet({ capturedFetchData: [] });
+  const capturedContent = data.capturedFetchData || [];
+  const selectedContent = getSelectedCapturedContent(capturedContent);
+
+  if (!selectedContent.length) {
+    hideSelectedCapturedContent();
+    return;
+  }
+
+  const content = JSON.stringify(selectedContent, null, 2);
+  showSelectedCapturedContent(content);
+});
+
+contentDeleteSelectedButton.addEventListener("click", async () => {
+  if (!selectedContentKeys.size || !confirm("Delete selected captured content?")) {
+    return;
+  }
+
+  const data = await storageGet({ capturedFetchData: [] });
+  const capturedContent = data.capturedFetchData || [];
+  const filteredContent = capturedContent.filter((item) => !selectedContentKeys.has(getContentKey(item)));
+
+  await storageSet({ capturedFetchData: filteredContent });
+  selectedContentKeys.clear();
+  hideSelectedCapturedContent();
+  refreshHistory();
 });
 
 contentCopySelectedButton.addEventListener("click", async () => {
