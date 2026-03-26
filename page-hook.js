@@ -31,9 +31,9 @@
       const parsed = new URL(url, window.location.origin);
       const hostname = parsed.hostname.toLowerCase();
       const pathname = parsed.pathname;
-      const isSupportedHost = hostname === "app.wakeo.co" || hostname === "internal.api.wakeo.co";
-      const isOrderPath = /\/order\/[^/]+$/.test(pathname);
-      return isSupportedHost && pathname.startsWith("/api/") && isOrderPath;
+      const isInternalWakeoApiHost = hostname === "internal.api.wakeo.co";
+      const isOrderPath = /^\/api\/v1\/orders\/[a-f0-9]+\/?$/i.test(pathname);
+      return isInternalWakeoApiHost && isOrderPath;
     } catch (error) {
       return false;
     }
