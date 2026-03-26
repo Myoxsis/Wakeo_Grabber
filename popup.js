@@ -7,6 +7,7 @@ const contentDeleteSelectedButton = document.getElementById("content-delete-sele
 const contentSelectedPreview = document.getElementById("content-selected-preview");
 const contentSelectedOutput = document.getElementById("content-selected-output");
 const contentCopySelectedButton = document.getElementById("content-copy-selected");
+const contentPathFilterCheckbox = document.getElementById("content-path-filter");
 const recordButton = document.getElementById("record");
 const captureNowButton = document.getElementById("capture-now");
 const autoProcessButton = document.getElementById("auto-process");
@@ -26,6 +27,7 @@ const tabPanels = [...document.querySelectorAll(".tab-panel")];
 
 let selectedUrls = new Set();
 let selectedContentKeys = new Set();
+let contentPathFilterEnabled = false;
 
 const normalizeUrl = (url = "") => {
   if (!url) {
@@ -135,6 +137,54 @@ const setContentSelectionUi = (capturedContent) => {
 
 const getSelectedCapturedContent = (capturedContent) =>
   capturedContent.filter((item) => selectedContentKeys.has(getContentKey(item)));
+
+const toPathText = (value) => {
+  if (typeof value === "string") {
+    const normalized = value.trim();
+    return normalized || null;
+  }
+
+  if (Array.isArray(value)) {
+    const normalized = value
+      .map((part) => (typeof part === "string" ? part.trim() : String(part ?? "").trim()))
+      .filter(Boolean)
+      .join(" > ");
+    return normalized || null;
+  }
+
+  return null;
+};
+
+const getTransportPathValues = (data) => {
+  if (!Array.isArray(data?.transports)) {
+    return [];
+  }
+
+  return data.transports
+    .map((transport) => toPathText(transport?.path))
+    .filter(Boolean);
+};
+
+const hasTransportPath = (item) => getTransportPathValues(item?.data).length > 0;
+
+const filterPayloadToTransportsWithPath = (item) => {
+  const transports = Array.isArray(item?.data?.transports) ? item.data.transports : null;
+  if (!transports) {
+    return item;
+  }
+
+  const filteredTransports = transports.filter((transport) => toPathText(transport?.path));
+  return {
+    ...item,
+    data: {
+      ...item.data,
+      transports: filteredTransports
+    }
+  };
+};
+
+const getVisibleCapturedContent = (capturedContent) =>
+  contentPathFilterEnabled ? capturedContent.filter(hasTransportPath) : capturedContent;
 
 const getSelectedCaptures = (captures) =>
   captures.filter((item) => selectedUrls.has(item.canonicalUrl || normalizeUrl(item.url)));
@@ -275,10 +325,19 @@ const renderCapturedContent = (items) => {
 
     const request = document.createElement("span");
     request.textContent = `Request: ${item.requestUrl}`;
+    const paths = getTransportPathValues(item.data);
+    const pathSummary = document.createElement("span");
+    if (paths.length) {
+      pathSummary.className = "path-badge";
+      pathSummary.textContent = paths.length === 1 ? `Path: ${paths[0]}` : `${paths.length} paths found`;
+    } else {
+      pathSummary.textContent = "Path: none";
+    }
 
     rowContent.appendChild(pageLink);
     rowContent.appendChild(meta);
     rowContent.appendChild(request);
+    rowContent.appendChild(pathSummary);
     row.appendChild(checkbox);
     row.appendChild(rowContent);
     entry.appendChild(row);
@@ -292,13 +351,14 @@ const refreshHistory = async () => {
   const data = await storageGet({ capturedLinks: [], capturedFetchData: [] });
   const captures = data.capturedLinks || [];
   const capturedContent = data.capturedFetchData || [];
+  const visibleCapturedContent = getVisibleCapturedContent(capturedContent);
   const validKeys = new Set(captures.map((item) => item.canonicalUrl || normalizeUrl(item.url)));
   const validContentKeys = new Set(capturedContent.map(getContentKey));
   selectedUrls = new Set([...selectedUrls].filter((key) => validKeys.has(key)));
   selectedContentKeys = new Set([...selectedContentKeys].filter((key) => validContentKeys.has(key)));
   renderHistory(captures);
-  renderCapturedContent(capturedContent);
-  setStatsUi(captures, capturedContent);
+  renderCapturedContent(visibleCapturedContent);
+  setStatsUi(captures, visibleCapturedContent);
 };
 
 const captureCurrentTab = async (reason) => {
@@ -432,7 +492,7 @@ copySelectedButton.addEventListener("click", async () => {
 
 contentSelectAllButton.addEventListener("click", async () => {
   const data = await storageGet({ capturedFetchData: [] });
-  const capturedContent = data.capturedFetchData || [];
+  const capturedContent = getVisibleCapturedContent(data.capturedFetchData || []);
   const shouldSelectAll = !areAllContentSelected(capturedContent);
 
   selectedContentKeys = shouldSelectAll ? new Set(capturedContent.map(getContentKey)) : new Set();
@@ -443,7 +503,9 @@ contentSelectAllButton.addEventListener("click", async () => {
 contentDownloadSelectedButton.addEventListener("click", async () => {
   const data = await storageGet({ capturedFetchData: [] });
   const capturedContent = data.capturedFetchData || [];
-  const selectedContent = getSelectedCapturedContent(capturedContent);
+  const selectedContent = getSelectedCapturedContent(capturedContent).map((item) =>
+    contentPathFilterEnabled ? filterPayloadToTransportsWithPath(item) : item
+  );
 
   if (!selectedContent.length) {
     return;
@@ -456,7 +518,9 @@ contentDownloadSelectedButton.addEventListener("click", async () => {
 contentPreviewSelectedButton.addEventListener("click", async () => {
   const data = await storageGet({ capturedFetchData: [] });
   const capturedContent = data.capturedFetchData || [];
-  const selectedContent = getSelectedCapturedContent(capturedContent);
+  const selectedContent = getSelectedCapturedContent(capturedContent).map((item) =>
+    contentPathFilterEnabled ? filterPayloadToTransportsWithPath(item) : item
+  );
 
   if (!selectedContent.length) {
     hideSelectedCapturedContent();
@@ -497,6 +561,12 @@ contentCopySelectedButton.addEventListener("click", async () => {
     contentSelectedOutput.focus();
     contentSelectedOutput.select();
   }
+});
+
+contentPathFilterCheckbox.addEventListener("change", async () => {
+  contentPathFilterEnabled = contentPathFilterCheckbox.checked;
+  hideSelectedCapturedContent();
+  await refreshHistory();
 });
 
 lockRightCheckbox.addEventListener("change", async () => {
