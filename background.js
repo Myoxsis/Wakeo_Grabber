@@ -118,9 +118,15 @@ chrome.runtime.onInstalled.addListener(() => {
 
 
 const captureTab = async (tabId, reason = "auto") => {
-  await injectContentScript(tabId);
-  await injectMainWorldHook(tabId);
-  await sendTabMessage(tabId, { type: "capture-request", reason });
+  let delivered = await sendTabMessage(tabId, { type: "capture-request", reason });
+
+  if (!delivered) {
+    await injectMainWorldHook(tabId);
+    await injectContentScript(tabId);
+    delivered = await sendTabMessage(tabId, { type: "capture-request", reason });
+  }
+
+  return delivered;
 };
 
 const captureAllWakeoTabs = async () => {
@@ -158,8 +164,6 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (!isWakeoUrl(currentUrl)) {
     return;
   }
-
-  injectMainWorldHook(tabId);
 
   storageGet({ recording: false }).then((data) => {
     if (!data.recording) {
