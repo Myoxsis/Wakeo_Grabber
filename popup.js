@@ -22,9 +22,15 @@ const contentCountPill = document.getElementById("content-count");
 const tabButtons = [...document.querySelectorAll(".tab")];
 const tabPanels = [...document.querySelectorAll(".tab-panel")];
 
+const VIRTUAL_ROW_HEIGHT = 86;
+const VIRTUAL_OVERSCAN = 6;
+const LONG_QUEUE_WAIT_CHANCE = 0.15;
+
 let selectedUrls = new Set();
 let selectedContentKeys = new Set();
 let contentPathFilterEnabled = false;
+let latestCaptures = [];
+let latestVisibleCapturedContent = [];
 
 const normalizeUrl = (url = "") => {
   if (!url) return null;
@@ -71,6 +77,13 @@ const sendTabMessage = (tabId, message) =>
   });
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const getRandomQueueOpenWait = () => {
+  if (Math.random() < LONG_QUEUE_WAIT_CHANCE) return 15000;
+  return 2000 + Math.round(Math.random() * 3000);
+};
+
+const getRandomQueueBetweenWait = () => 2000 + Math.round(Math.random() * 3000);
 
 const collapseUrl = (url = "", maxLength = 72) => {
   if (!url || url.length <= maxLength) return url;
@@ -229,121 +242,149 @@ const createEmptyState = (text) => {
   return emptyState;
 };
 
-const renderHistory = (items) => {
-  historyList.innerHTML = "";
+const getVirtualWindow = (listElement, items) => {
+  const viewportHeight = listElement.clientHeight || 280;
+  const scrollTop = listElement.scrollTop || 0;
+  const startIndex = Math.max(0, Math.floor(scrollTop / VIRTUAL_ROW_HEIGHT) - VIRTUAL_OVERSCAN);
+  const visibleCount = Math.ceil(viewportHeight / VIRTUAL_ROW_HEIGHT) + VIRTUAL_OVERSCAN * 2;
+  const endIndex = Math.min(items.length, startIndex + visibleCount);
+  return { startIndex, endIndex };
+};
+
+const renderVirtualizedList = (listElement, items, emptyText, renderItem, setUiState) => {
+  listElement.innerHTML = "";
 
   if (!items.length) {
-    historyList.appendChild(createEmptyState("No pending shipment links. Start recording or click Capture now."));
-    setSelectionButtonsUi(items);
+    listElement.style.paddingTop = "";
+    listElement.style.paddingBottom = "";
+    listElement.appendChild(createEmptyState(emptyText));
+    setUiState(items);
     return;
   }
 
-  items.forEach((item) => {
-    const key = getCaptureKey(item);
-    const entry = document.createElement("li");
+  const { startIndex, endIndex } = getVirtualWindow(listElement, items);
+  listElement.style.paddingTop = `${startIndex * VIRTUAL_ROW_HEIGHT}px`;
+  listElement.style.paddingBottom = `${Math.max(0, (items.length - endIndex) * VIRTUAL_ROW_HEIGHT)}px`;
 
-    const row = document.createElement("label");
-    row.className = "history__row";
-
-    const checkbox = document.createElement("input");
-    checkbox.type = "checkbox";
-    checkbox.checked = selectedUrls.has(key);
-    checkbox.addEventListener("change", () => {
-      if (checkbox.checked) selectedUrls.add(key);
-      else selectedUrls.delete(key);
-      setStatsUi(items);
-      setSelectionButtonsUi(items);
-    });
-
-    const rowContent = document.createElement("div");
-    rowContent.className = "history__row-content";
-
-    const link = document.createElement("a");
-    link.href = item.url;
-    link.textContent = collapseUrl(item.url);
-    link.title = item.url;
-    link.target = "_blank";
-
-    const meta = document.createElement("span");
-    meta.textContent = `${item.source || "unknown"} · ${formatCapturedAt(item.capturedAt)}`;
-
-    rowContent.appendChild(link);
-    rowContent.appendChild(meta);
-    row.appendChild(checkbox);
-    row.appendChild(rowContent);
-    entry.appendChild(row);
-    historyList.appendChild(entry);
+  items.slice(startIndex, endIndex).forEach((item) => {
+    listElement.appendChild(renderItem(item, items));
   });
 
-  setSelectionButtonsUi(items);
+  setUiState(items);
+};
+
+const renderHistoryItem = (item, allItems) => {
+  const key = getCaptureKey(item);
+  const entry = document.createElement("li");
+
+  const row = document.createElement("label");
+  row.className = "history__row";
+
+  const checkbox = document.createElement("input");
+  checkbox.type = "checkbox";
+  checkbox.checked = selectedUrls.has(key);
+  checkbox.addEventListener("change", () => {
+    if (checkbox.checked) selectedUrls.add(key);
+    else selectedUrls.delete(key);
+    setStatsUi(latestCaptures, latestVisibleCapturedContent);
+    setSelectionButtonsUi(allItems);
+  });
+
+  const rowContent = document.createElement("div");
+  rowContent.className = "history__row-content";
+
+  const link = document.createElement("a");
+  link.href = item.url;
+  link.textContent = collapseUrl(item.url);
+  link.title = item.url;
+  link.target = "_blank";
+
+  const meta = document.createElement("span");
+  meta.textContent = `${item.source || "unknown"} · ${formatCapturedAt(item.capturedAt)}`;
+
+  rowContent.appendChild(link);
+  rowContent.appendChild(meta);
+  row.appendChild(checkbox);
+  row.appendChild(rowContent);
+  entry.appendChild(row);
+  return entry;
+};
+
+const renderContentItem = (item, allItems) => {
+  const key = getContentKey(item);
+  const entry = document.createElement("li");
+  const row = document.createElement("label");
+  row.className = "history__row";
+
+  const checkbox = document.createElement("input");
+  checkbox.type = "checkbox";
+  checkbox.checked = selectedContentKeys.has(key);
+  checkbox.addEventListener("change", () => {
+    if (checkbox.checked) selectedContentKeys.add(key);
+    else selectedContentKeys.delete(key);
+    if (!selectedContentKeys.size) hideSelectedCapturedContent();
+    setContentSelectionUi(allItems);
+  });
+
+  const rowContent = document.createElement("div");
+  rowContent.className = "history__row-content";
+
+  const pageLink = document.createElement("a");
+  pageLink.href = item.pageUrl;
+  pageLink.textContent = collapseUrl(item.pageUrl);
+  pageLink.title = item.pageUrl;
+  pageLink.target = "_blank";
+
+  const meta = document.createElement("span");
+  meta.textContent = `${item.source || "network-json"} · ${formatCapturedAt(item.capturedAt)}`;
+
+  const request = document.createElement("span");
+  request.textContent = `Request: ${collapseUrl(item.requestUrl || "unknown", 64)}`;
+  request.title = item.requestUrl || "";
+
+  const paths = getTransportPathValues(item.data);
+  const pathSummary = document.createElement("span");
+  if (paths.length) {
+    pathSummary.className = "path-badge";
+    pathSummary.textContent = paths.length === 1 ? `Path: ${paths[0]}` : `${paths.length} paths found`;
+    pathSummary.title = paths.join("\n");
+  } else {
+    pathSummary.textContent = "Path: none";
+  }
+
+  rowContent.appendChild(pageLink);
+  rowContent.appendChild(meta);
+  rowContent.appendChild(request);
+  rowContent.appendChild(pathSummary);
+  row.appendChild(checkbox);
+  row.appendChild(rowContent);
+  entry.appendChild(row);
+  return entry;
+};
+
+const renderHistory = (items) => {
+  latestCaptures = items;
+  renderVirtualizedList(
+    historyList,
+    items,
+    "No pending shipment links. Start recording or click Capture now.",
+    renderHistoryItem,
+    setSelectionButtonsUi
+  );
 };
 
 const renderCapturedContent = (items) => {
-  contentHistoryList.innerHTML = "";
-
-  if (!items.length) {
-    contentHistoryList.appendChild(
-      createEmptyState("No captured content yet. Open a shipment page while recording is active.")
-    );
-    hideSelectedCapturedContent();
-    setContentSelectionUi(items);
-    return;
-  }
-
-  items.forEach((item) => {
-    const key = getContentKey(item);
-    const entry = document.createElement("li");
-    const row = document.createElement("label");
-    row.className = "history__row";
-
-    const checkbox = document.createElement("input");
-    checkbox.type = "checkbox";
-    checkbox.checked = selectedContentKeys.has(key);
-    checkbox.addEventListener("change", () => {
-      if (checkbox.checked) selectedContentKeys.add(key);
-      else selectedContentKeys.delete(key);
-      if (!selectedContentKeys.size) hideSelectedCapturedContent();
-      setContentSelectionUi(items);
-      setStatsUi([], items);
-    });
-
-    const rowContent = document.createElement("div");
-    rowContent.className = "history__row-content";
-
-    const pageLink = document.createElement("a");
-    pageLink.href = item.pageUrl;
-    pageLink.textContent = collapseUrl(item.pageUrl);
-    pageLink.title = item.pageUrl;
-    pageLink.target = "_blank";
-
-    const meta = document.createElement("span");
-    meta.textContent = `${item.source || "network-json"} · ${formatCapturedAt(item.capturedAt)}`;
-
-    const request = document.createElement("span");
-    request.textContent = `Request: ${collapseUrl(item.requestUrl || "unknown", 64)}`;
-    request.title = item.requestUrl || "";
-
-    const paths = getTransportPathValues(item.data);
-    const pathSummary = document.createElement("span");
-    if (paths.length) {
-      pathSummary.className = "path-badge";
-      pathSummary.textContent = paths.length === 1 ? `Path: ${paths[0]}` : `${paths.length} paths found`;
-      pathSummary.title = paths.join("\n");
-    } else {
-      pathSummary.textContent = "Path: none";
+  latestVisibleCapturedContent = items;
+  renderVirtualizedList(
+    contentHistoryList,
+    items,
+    "No captured content yet. Open a shipment page while recording is active.",
+    renderContentItem,
+    (visibleItems) => {
+      if (!visibleItems.length) hideSelectedCapturedContent();
+      setContentSelectionUi(visibleItems);
     }
-
-    rowContent.appendChild(pageLink);
-    rowContent.appendChild(meta);
-    rowContent.appendChild(request);
-    rowContent.appendChild(pathSummary);
-    row.appendChild(checkbox);
-    row.appendChild(rowContent);
-    entry.appendChild(row);
-    contentHistoryList.appendChild(entry);
-  });
-
-  setContentSelectionUi(items);
+  );
 };
 
 const refreshHistory = async () => {
@@ -377,20 +418,26 @@ const processQueue = async () => {
   autoProcessButton.disabled = true;
   autoProcessButton.textContent = "Processing...";
 
-  for (const capture of captures) {
+  for (let index = 0; index < captures.length; index += 1) {
+    const capture = captures[index];
+    const openWait = getRandomQueueOpenWait();
+    autoProcessButton.textContent = `Processing ${index + 1}/${captures.length}...`;
+
     await new Promise((resolve) => {
       chrome.tabs.create({ url: capture.url, active: false }, (tab) => {
-        const waitTime = 1200 + Math.round(Math.random() * 1800);
         setTimeout(() => {
           if (tab?.id) {
             chrome.tabs.remove(tab.id, () => resolve());
             return;
           }
           resolve();
-        }, waitTime);
+        }, openWait);
       });
     });
-    await delay(500 + Math.round(Math.random() * 900));
+
+    if (index < captures.length - 1) {
+      await delay(getRandomQueueBetweenWait());
+    }
   }
 
   autoProcessButton.textContent = "Auto process queue";
@@ -414,7 +461,7 @@ selectAllButton.addEventListener("click", async () => {
   const shouldSelectAll = !areAllCapturesSelected(captures);
   selectedUrls = shouldSelectAll ? new Set(captures.map(getCaptureKey)) : new Set();
   renderHistory(captures);
-  setStatsUi(captures);
+  setStatsUi(captures, latestVisibleCapturedContent);
 });
 
 deleteSelectedButton.addEventListener("click", async () => {
@@ -428,7 +475,7 @@ deleteSelectedButton.addEventListener("click", async () => {
 });
 
 contentSelectAllButton.addEventListener("click", async () => {
-  const data = await storageGet({ capturedFetchData: [] });
+  const data = await storageGet({ capturedLinks: [], capturedFetchData: [] });
   const capturedContent = getVisibleCapturedContent(data.capturedFetchData || []);
   const shouldSelectAll = !areAllContentSelected(capturedContent);
   selectedContentKeys = shouldSelectAll ? new Set(capturedContent.map(getContentKey)) : new Set();
@@ -513,8 +560,13 @@ tabButtons.forEach((button) => {
     tabPanels.forEach((panel) => {
       panel.hidden = panel.dataset.panel !== tab;
     });
+    renderHistory(latestCaptures);
+    renderCapturedContent(latestVisibleCapturedContent);
   });
 });
+
+historyList.addEventListener("scroll", () => renderHistory(latestCaptures));
+contentHistoryList.addEventListener("scroll", () => renderCapturedContent(latestVisibleCapturedContent));
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== "local" || (!changes.capturedLinks && !changes.capturedFetchData && !changes.recording)) return;
