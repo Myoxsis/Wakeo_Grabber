@@ -485,10 +485,9 @@ contentSelectAllButton.addEventListener("click", async () => {
 
 contentDownloadAllButton.addEventListener("click", async () => {
   const data = await storageGet({ capturedFetchData: [] });
-  const visibleContent = getVisibleCapturedContent(data.capturedFetchData || []);
-  const content = visibleContent.map((item) => (contentPathFilterEnabled ? filterPayloadToTransportsWithPath(item) : item));
-  if (!content.length) return;
-  downloadJsonFile(JSON.stringify(content, null, 2), "wakeo-content-all");
+  const capturedContent = data.capturedFetchData || [];
+  if (!capturedContent.length) return;
+  downloadJsonFile(JSON.stringify(capturedContent, null, 2), "wakeo-content-all");
 });
 
 contentDownloadSelectedButton.addEventListener("click", async () => {
