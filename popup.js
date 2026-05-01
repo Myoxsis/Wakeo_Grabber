@@ -1,5 +1,6 @@
 const historyList = document.getElementById("history");
 const contentHistoryList = document.getElementById("content-history");
+const contentDownloadAllButton = document.getElementById("content-download-all");
 const contentSelectAllButton = document.getElementById("content-select-all");
 const contentPreviewSelectedButton = document.getElementById("content-preview-selected");
 const contentDownloadSelectedButton = document.getElementById("content-download-selected");
@@ -9,6 +10,7 @@ const contentSelectedOutput = document.getElementById("content-selected-output")
 const contentCopySelectedButton = document.getElementById("content-copy-selected");
 const contentPathFilterCheckbox = document.getElementById("content-path-filter");
 const recordButton = document.getElementById("record");
+const recordingStatusPill = document.getElementById("recording-status");
 const captureNowButton = document.getElementById("capture-now");
 const autoProcessButton = document.getElementById("auto-process");
 const selectAllButton = document.getElementById("select-all");
@@ -25,10 +27,7 @@ let selectedContentKeys = new Set();
 let contentPathFilterEnabled = false;
 
 const normalizeUrl = (url = "") => {
-  if (!url) {
-    return null;
-  }
-
+  if (!url) return null;
   try {
     const parsed = new URL(url);
     parsed.hash = "";
@@ -39,20 +38,14 @@ const normalizeUrl = (url = "") => {
 };
 
 const storageGet = (defaults) =>
-  new Promise((resolve) => {
-    chrome.storage.local.get(defaults, resolve);
-  });
+  new Promise((resolve) => chrome.storage.local.get(defaults, resolve));
 
 const storageSet = (value) =>
-  new Promise((resolve) => {
-    chrome.storage.local.set(value, resolve);
-  });
+  new Promise((resolve) => chrome.storage.local.set(value, resolve));
 
 const queryActiveTab = () =>
   new Promise((resolve) => {
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      resolve(tabs[0]);
-    });
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => resolve(tabs[0]));
   });
 
 const sendRuntimeMessage = (message) =>
@@ -62,7 +55,6 @@ const sendRuntimeMessage = (message) =>
         resolve({ ok: false, reason: chrome.runtime.lastError.message });
         return;
       }
-
       resolve(response);
     });
   });
@@ -74,21 +66,46 @@ const sendTabMessage = (tabId, message) =>
         resolve({ ok: false, reason: chrome.runtime.lastError.message });
         return;
       }
-
       resolve(response);
     });
   });
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const areAllCapturesSelected = (captures) =>
-  captures.length > 0 &&
-  captures.every((item) => selectedUrls.has(item.canonicalUrl || normalizeUrl(item.url)));
+const collapseUrl = (url = "", maxLength = 72) => {
+  if (!url || url.length <= maxLength) return url;
+  try {
+    const parsed = new URL(url);
+    const compact = `${parsed.hostname}${parsed.pathname}`;
+    if (compact.length <= maxLength) return compact;
+    return `${compact.slice(0, Math.max(24, maxLength - 16))}…${compact.slice(-12)}`;
+  } catch (error) {
+    return `${url.slice(0, Math.max(24, maxLength - 16))}…${url.slice(-12)}`;
+  }
+};
+
+const formatCapturedAt = (value) => {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "Unknown time" : date.toLocaleString();
+};
+
+const downloadJsonFile = (content, prefix = "wakeo-content") => {
+  const blob = new Blob([content], { type: "application/json" });
+  const blobUrl = URL.createObjectURL(blob);
+  const downloadLink = document.createElement("a");
+  const now = new Date().toISOString().replace(/[.:]/g, "-");
+  downloadLink.href = blobUrl;
+  downloadLink.download = `${prefix}-${now}.json`;
+  downloadLink.click();
+  URL.revokeObjectURL(blobUrl);
+};
 
 const setRecordingUi = (recording) => {
   recordButton.textContent = recording ? "Stop recording" : "Start recording";
   recordButton.classList.toggle("primary", !recording);
   recordButton.classList.toggle("ghost", recording);
+  recordingStatusPill.textContent = recording ? "Recording active" : "Recording stopped";
+  recordingStatusPill.classList.toggle("is-recording", recording);
 };
 
 const setStatsUi = (captures, capturedContent = []) => {
@@ -96,6 +113,11 @@ const setStatsUi = (captures, capturedContent = []) => {
   selectionCountPill.textContent = `${selectedUrls.size} selected`;
   contentCountPill.textContent = `${capturedContent.length} payload${capturedContent.length === 1 ? "" : "s"}`;
 };
+
+const getCaptureKey = (item) => item.canonicalUrl || normalizeUrl(item.url);
+
+const areAllCapturesSelected = (captures) =>
+  captures.length > 0 && captures.every((item) => selectedUrls.has(getCaptureKey(item)));
 
 const setSelectionButtonsUi = (captures) => {
   const hasSelection = selectedUrls.size > 0;
@@ -106,6 +128,7 @@ const setSelectionButtonsUi = (captures) => {
   autoProcessButton.disabled = !hasSelection;
   selectAllButton.disabled = !hasItems;
   selectAllButton.textContent = allSelected ? "Deselect all" : "Select all";
+  selectAllButton.setAttribute("aria-pressed", allSelected ? "true" : "false");
 };
 
 const getContentKey = (item) =>
@@ -119,25 +142,108 @@ const setContentSelectionUi = (capturedContent) => {
   const hasSelection = selectedContentKeys.size > 0;
   const allSelected = areAllContentSelected(capturedContent);
 
+  contentDownloadAllButton.disabled = !hasItems;
   contentSelectAllButton.disabled = !hasItems;
   contentPreviewSelectedButton.disabled = !hasSelection;
   contentDownloadSelectedButton.disabled = !hasSelection;
   contentDeleteSelectedButton.disabled = !hasSelection;
-  contentSelectAllButton.textContent = allSelected ? "Deselect all content" : "Select all content";
+  contentSelectAllButton.textContent = allSelected ? "Deselect all" : "Select all";
+  contentSelectAllButton.setAttribute("aria-pressed", allSelected ? "true" : "false");
 };
+
+const toPathText = (value) => {
+  if (typeof value === "string") return value.trim() || null;
+  if (Array.isArray(value)) {
+    const normalized = value
+      .map((part) => (typeof part === "string" ? part.trim() : String(part ?? "").trim()))
+      .filter(Boolean)
+      .join(" > ");
+    return normalized || null;
+  }
+  return null;
+};
+
+const extractPathValue = (value) => {
+  if (Array.isArray(value) && value.length && value.every((entry) => Array.isArray(entry))) {
+    return value.map((entry) => toPathText(entry)).find(Boolean) || null;
+  }
+  return toPathText(value);
+};
+
+const getPathFromTransport = (transport) =>
+  transport && typeof transport === "object" ? extractPathValue(transport.path) : null;
+
+const getTransportPathValues = (data) => {
+  if (!data || typeof data !== "object") return [];
+
+  const transportPaths = Array.isArray(data.transports)
+    ? data.transports.map((transport) => getPathFromTransport(transport)).filter(Boolean)
+    : [];
+
+  if (transportPaths.length) return transportPaths;
+
+  const rootPath = extractPathValue(data.path);
+  return rootPath ? [rootPath] : [];
+};
+
+const hasTransportPath = (item) => getTransportPathValues(item?.data).length > 0;
+
+const filterPayloadToTransportsWithPath = (item) => {
+  const transports = Array.isArray(item?.data?.transports) ? item.data.transports : null;
+  if (!transports) return item;
+
+  return {
+    ...item,
+    data: {
+      ...item.data,
+      transports: transports.filter((transport) => getPathFromTransport(transport))
+    }
+  };
+};
+
+const getVisibleCapturedContent = (capturedContent) =>
+  contentPathFilterEnabled ? capturedContent.filter(hasTransportPath) : capturedContent;
+
+const getSelectedCaptures = (captures) =>
+  captures.filter((item) => selectedUrls.has(getCaptureKey(item)));
 
 const getSelectedCapturedContent = (capturedContent) =>
   capturedContent.filter((item) => selectedContentKeys.has(getContentKey(item)));
 
-const getVisibleCapturedContent = (capturedContent) =>
-  contentPathFilterEnabled ? capturedContent.filter((item) => item?.data?.transports?.length) : capturedContent;
+const showSelectedCapturedContent = (content) => {
+  contentSelectedOutput.value = content;
+  contentSelectedPreview.hidden = false;
+  contentSelectedOutput.focus();
+  contentSelectedOutput.select();
+};
+
+const hideSelectedCapturedContent = () => {
+  contentSelectedPreview.hidden = true;
+  contentSelectedOutput.value = "";
+};
+
+const createEmptyState = (text) => {
+  const emptyState = document.createElement("li");
+  emptyState.className = "empty";
+  emptyState.textContent = text;
+  return emptyState;
+};
 
 const renderHistory = (items) => {
   historyList.innerHTML = "";
 
+  if (!items.length) {
+    historyList.appendChild(createEmptyState("No pending shipment links. Start recording or click Capture now."));
+    setSelectionButtonsUi(items);
+    return;
+  }
+
   items.forEach((item) => {
-    const key = item.canonicalUrl || normalizeUrl(item.url);
+    const key = getCaptureKey(item);
     const entry = document.createElement("li");
+
+    const row = document.createElement("label");
+    row.className = "history__row";
 
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
@@ -146,15 +252,26 @@ const renderHistory = (items) => {
       if (checkbox.checked) selectedUrls.add(key);
       else selectedUrls.delete(key);
       setStatsUi(items);
+      setSelectionButtonsUi(items);
     });
+
+    const rowContent = document.createElement("div");
+    rowContent.className = "history__row-content";
 
     const link = document.createElement("a");
     link.href = item.url;
-    link.textContent = item.url;
+    link.textContent = collapseUrl(item.url);
+    link.title = item.url;
     link.target = "_blank";
 
-    entry.appendChild(checkbox);
-    entry.appendChild(link);
+    const meta = document.createElement("span");
+    meta.textContent = `${item.source || "unknown"} · ${formatCapturedAt(item.capturedAt)}`;
+
+    rowContent.appendChild(link);
+    rowContent.appendChild(meta);
+    row.appendChild(checkbox);
+    row.appendChild(rowContent);
+    entry.appendChild(row);
     historyList.appendChild(entry);
   });
 
@@ -164,9 +281,20 @@ const renderHistory = (items) => {
 const renderCapturedContent = (items) => {
   contentHistoryList.innerHTML = "";
 
+  if (!items.length) {
+    contentHistoryList.appendChild(
+      createEmptyState("No captured content yet. Open a shipment page while recording is active.")
+    );
+    hideSelectedCapturedContent();
+    setContentSelectionUi(items);
+    return;
+  }
+
   items.forEach((item) => {
     const key = getContentKey(item);
     const entry = document.createElement("li");
+    const row = document.createElement("label");
+    row.className = "history__row";
 
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
@@ -174,14 +302,44 @@ const renderCapturedContent = (items) => {
     checkbox.addEventListener("change", () => {
       if (checkbox.checked) selectedContentKeys.add(key);
       else selectedContentKeys.delete(key);
+      if (!selectedContentKeys.size) hideSelectedCapturedContent();
+      setContentSelectionUi(items);
+      setStatsUi([], items);
     });
 
-    const link = document.createElement("a");
-    link.href = item.pageUrl;
-    link.textContent = item.pageUrl;
+    const rowContent = document.createElement("div");
+    rowContent.className = "history__row-content";
 
-    entry.appendChild(checkbox);
-    entry.appendChild(link);
+    const pageLink = document.createElement("a");
+    pageLink.href = item.pageUrl;
+    pageLink.textContent = collapseUrl(item.pageUrl);
+    pageLink.title = item.pageUrl;
+    pageLink.target = "_blank";
+
+    const meta = document.createElement("span");
+    meta.textContent = `${item.source || "network-json"} · ${formatCapturedAt(item.capturedAt)}`;
+
+    const request = document.createElement("span");
+    request.textContent = `Request: ${collapseUrl(item.requestUrl || "unknown", 64)}`;
+    request.title = item.requestUrl || "";
+
+    const paths = getTransportPathValues(item.data);
+    const pathSummary = document.createElement("span");
+    if (paths.length) {
+      pathSummary.className = "path-badge";
+      pathSummary.textContent = paths.length === 1 ? `Path: ${paths[0]}` : `${paths.length} paths found`;
+      pathSummary.title = paths.join("\n");
+    } else {
+      pathSummary.textContent = "Path: none";
+    }
+
+    rowContent.appendChild(pageLink);
+    rowContent.appendChild(meta);
+    rowContent.appendChild(request);
+    rowContent.appendChild(pathSummary);
+    row.appendChild(checkbox);
+    row.appendChild(rowContent);
+    entry.appendChild(row);
     contentHistoryList.appendChild(entry);
   });
 
@@ -192,41 +350,183 @@ const refreshHistory = async () => {
   const data = await storageGet({ capturedLinks: [], capturedFetchData: [] });
   const captures = data.capturedLinks || [];
   const capturedContent = data.capturedFetchData || [];
+  const visibleCapturedContent = getVisibleCapturedContent(capturedContent);
+
+  const validKeys = new Set(captures.map(getCaptureKey));
+  const validContentKeys = new Set(capturedContent.map(getContentKey));
+  selectedUrls = new Set([...selectedUrls].filter((key) => validKeys.has(key)));
+  selectedContentKeys = new Set([...selectedContentKeys].filter((key) => validContentKeys.has(key)));
+
   renderHistory(captures);
-  renderCapturedContent(getVisibleCapturedContent(capturedContent));
-  setStatsUi(captures, capturedContent);
+  renderCapturedContent(visibleCapturedContent);
+  setStatsUi(captures, visibleCapturedContent);
 };
 
-const captureCurrentTab = async () => {
+const captureCurrentTab = async (reason = "manual") => {
   const tab = await queryActiveTab();
   if (!tab?.id) return;
-  await sendTabMessage(tab.id, { type: "capture-request" });
+  await sendTabMessage(tab.id, { type: "capture-request", reason });
+  await refreshHistory();
+};
+
+const processQueue = async () => {
+  const data = await storageGet({ capturedLinks: [] });
+  const captures = getSelectedCaptures(data.capturedLinks || []);
+  if (!captures.length) return;
+
+  autoProcessButton.disabled = true;
+  autoProcessButton.textContent = "Processing...";
+
+  for (const capture of captures) {
+    await new Promise((resolve) => {
+      chrome.tabs.create({ url: capture.url, active: false }, (tab) => {
+        const waitTime = 1200 + Math.round(Math.random() * 1800);
+        setTimeout(() => {
+          if (tab?.id) {
+            chrome.tabs.remove(tab.id, () => resolve());
+            return;
+          }
+          resolve();
+        }, waitTime);
+      });
+    });
+    await delay(500 + Math.round(Math.random() * 900));
+  }
+
+  autoProcessButton.textContent = "Auto process queue";
   await refreshHistory();
 };
 
 recordButton.addEventListener("click", async () => {
   const data = await storageGet({ recording: false });
-  const next = !data.recording;
-  await sendRuntimeMessage({ type: "set-recording", payload: { recording: next } });
-  setRecordingUi(next);
+  const nextRecording = !data.recording;
+  await sendRuntimeMessage({ type: "set-recording", payload: { recording: nextRecording } });
+  setRecordingUi(nextRecording);
+  if (nextRecording) captureCurrentTab("manual");
 });
 
-captureNowButton.addEventListener("click", captureCurrentTab);
+captureNowButton.addEventListener("click", () => captureCurrentTab("manual"));
+autoProcessButton.addEventListener("click", processQueue);
+
+selectAllButton.addEventListener("click", async () => {
+  const data = await storageGet({ capturedLinks: [] });
+  const captures = data.capturedLinks || [];
+  const shouldSelectAll = !areAllCapturesSelected(captures);
+  selectedUrls = shouldSelectAll ? new Set(captures.map(getCaptureKey)) : new Set();
+  renderHistory(captures);
+  setStatsUi(captures);
+});
+
+deleteSelectedButton.addEventListener("click", async () => {
+  if (!selectedUrls.size || !confirm("Delete selected links?")) return;
+  const data = await storageGet({ capturedLinks: [] });
+  const captures = data.capturedLinks || [];
+  const filtered = captures.filter((item) => !selectedUrls.has(getCaptureKey(item)));
+  await storageSet({ capturedLinks: filtered });
+  selectedUrls.clear();
+  await refreshHistory();
+});
+
+contentSelectAllButton.addEventListener("click", async () => {
+  const data = await storageGet({ capturedFetchData: [] });
+  const capturedContent = getVisibleCapturedContent(data.capturedFetchData || []);
+  const shouldSelectAll = !areAllContentSelected(capturedContent);
+  selectedContentKeys = shouldSelectAll ? new Set(capturedContent.map(getContentKey)) : new Set();
+  renderCapturedContent(capturedContent);
+  setStatsUi(data.capturedLinks || [], capturedContent);
+});
+
+contentDownloadAllButton.addEventListener("click", async () => {
+  const data = await storageGet({ capturedFetchData: [] });
+  const visibleContent = getVisibleCapturedContent(data.capturedFetchData || []);
+  const content = visibleContent.map((item) => (contentPathFilterEnabled ? filterPayloadToTransportsWithPath(item) : item));
+  if (!content.length) return;
+  downloadJsonFile(JSON.stringify(content, null, 2), "wakeo-content-all");
+});
 
 contentDownloadSelectedButton.addEventListener("click", async () => {
   const data = await storageGet({ capturedFetchData: [] });
-  const selected = getSelectedCapturedContent(data.capturedFetchData || []);
-  if (!selected.length) return;
-  const content = JSON.stringify(selected, null, 2);
-  const blob = new Blob([content]);
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "wakeo-content.json";
-  a.click();
-  URL.revokeObjectURL(url);
+  const selectedContent = getSelectedCapturedContent(data.capturedFetchData || []).map((item) =>
+    contentPathFilterEnabled ? filterPayloadToTransportsWithPath(item) : item
+  );
+  if (!selectedContent.length) return;
+  downloadJsonFile(JSON.stringify(selectedContent, null, 2), "wakeo-content-selected");
 });
 
-chrome.storage.onChanged.addListener(refreshHistory);
+contentPreviewSelectedButton.addEventListener("click", async () => {
+  const data = await storageGet({ capturedFetchData: [] });
+  const selectedContent = getSelectedCapturedContent(data.capturedFetchData || []).map((item) =>
+    contentPathFilterEnabled ? filterPayloadToTransportsWithPath(item) : item
+  );
+  if (!selectedContent.length) {
+    hideSelectedCapturedContent();
+    return;
+  }
+  showSelectedCapturedContent(JSON.stringify(selectedContent, null, 2));
+});
+
+contentDeleteSelectedButton.addEventListener("click", async () => {
+  if (!selectedContentKeys.size || !confirm("Delete selected captured content?")) return;
+  const data = await storageGet({ capturedFetchData: [] });
+  const capturedContent = data.capturedFetchData || [];
+  const filteredContent = capturedContent.filter((item) => !selectedContentKeys.has(getContentKey(item)));
+  await storageSet({ capturedFetchData: filteredContent });
+  selectedContentKeys.clear();
+  hideSelectedCapturedContent();
+  await refreshHistory();
+});
+
+contentCopySelectedButton.addEventListener("click", async () => {
+  if (!contentSelectedOutput.value) return;
+  try {
+    await navigator.clipboard.writeText(contentSelectedOutput.value);
+    contentCopySelectedButton.textContent = "Copied";
+    setTimeout(() => {
+      contentCopySelectedButton.textContent = "Copy";
+    }, 1200);
+  } catch (error) {
+    contentSelectedOutput.focus();
+    contentSelectedOutput.select();
+  }
+});
+
+contentPathFilterCheckbox.addEventListener("change", async () => {
+  contentPathFilterEnabled = contentPathFilterCheckbox.checked;
+  hideSelectedCapturedContent();
+  await refreshHistory();
+});
+
+lockRightCheckbox.addEventListener("change", async () => {
+  const lockRightSide = lockRightCheckbox.checked;
+  await sendRuntimeMessage({ type: "set-lock-right-side", payload: { lockRightSide } });
+  if (lockRightSide && chrome.sidePanel?.open) {
+    chrome.windows.getCurrent((window) => {
+      chrome.sidePanel.open({ windowId: window.id });
+    });
+  }
+});
+
+tabButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    const tab = button.dataset.tab;
+    tabButtons.forEach((node) => node.classList.toggle("is-active", node === button));
+    tabPanels.forEach((panel) => {
+      panel.hidden = panel.dataset.panel !== tab;
+    });
+  });
+});
+
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName !== "local" || (!changes.capturedLinks && !changes.capturedFetchData && !changes.recording)) return;
+  if (changes.recording) setRecordingUi(Boolean(changes.recording.newValue));
+  refreshHistory();
+});
+
+const initialize = async () => {
+  const data = await storageGet({ recording: false, lockRightSide: false });
+  setRecordingUi(Boolean(data.recording));
+  lockRightCheckbox.checked = Boolean(data.lockRightSide);
+  await refreshHistory();
+};
 
 initialize();
