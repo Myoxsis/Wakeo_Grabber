@@ -251,7 +251,7 @@ const collectShipmentFetchData = async () => {
         return {
           pageUrl: normalizeUrl(window.location.href),
           requestUrl: normalizeUrl(requestUrl),
-          source: "network-json",
+          source: "network-json-fallback",
           capturedAt,
           data
         };
@@ -356,19 +356,30 @@ const onRuntimeMessage = (message, sender, sendResponse) => {
       return false;
     }
 
+    const links = collectWakeoLinks();
+    safeRuntimeSendMessage({ type: "capture-links", payload: { links } }, () => {
+      sendResponse({ ok: true, links: links.length, fetchData: 0 });
+    });
+
+    return true;
+  }
+
+  if (message.type === "capture-fetch-fallback") {
+    if (!isWakeoUrl(window.location.href)) {
+      sendResponse({ ok: true, skipped: true, reason: "not-wakeo" });
+      return false;
+    }
+
     (async () => {
-      const links = collectWakeoLinks();
       const shipmentFetchData = await collectShipmentFetchData();
 
-      safeRuntimeSendMessage({ type: "capture-links", payload: { links } }, () => {
-        if (!shipmentFetchData.length) {
-          sendResponse({ ok: true, links: links.length, fetchData: 0 });
-          return;
-        }
+      if (!shipmentFetchData.length) {
+        sendResponse({ ok: true, fetchData: 0 });
+        return;
+      }
 
-        safeRuntimeSendMessage({ type: "capture-fetch-data", payload: { fetchData: shipmentFetchData } }, () => {
-          sendResponse({ ok: true, links: links.length, fetchData: shipmentFetchData.length });
-        });
+      safeRuntimeSendMessage({ type: "capture-fetch-data", payload: { fetchData: shipmentFetchData } }, () => {
+        sendResponse({ ok: true, fetchData: shipmentFetchData.length });
       });
     })();
 
