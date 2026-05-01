@@ -630,8 +630,6 @@ const initialize = async () => {
   setRecordingUi(data.recording);
   lockRightCheckbox.checked = data.lockRightSide;
   await refreshHistory();
-
-  setInterval(refreshHistory, 1500);
 };
 
 initialize();
