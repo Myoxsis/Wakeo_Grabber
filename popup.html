@@ -17,11 +17,12 @@
         <div>
           <p class="eyebrow">Shipment capture workspace</p>
           <h1>Wakeo Grabber</h1>
-          <p>Capture and review shipment links from a cleaner side-panel workflow.</p>
+          <p>Capture and review shipment content from a cleaner side-panel workflow.</p>
         </div>
       </header>
 
       <section class="popup__stats panel" aria-live="polite" aria-label="Capture summary">
+        <span id="recording-status" class="stat-pill stat-pill--status">Recording stopped</span>
         <span id="capture-count" class="stat-pill">0 links</span>
         <span id="selection-count" class="stat-pill">0 selected</span>
         <span id="content-count" class="stat-pill">0 payloads</span>
@@ -35,20 +36,20 @@
 
       <section class="panel panel--flush">
         <nav class="tabs" aria-label="Panel sections">
-          <button class="tab is-active" data-tab="links">
+          <button class="tab" data-tab="links">
             <span class="material-symbols-rounded" aria-hidden="true">pending_actions</span>
             Pending links
           </button>
-          <button class="tab" data-tab="content">
+          <button class="tab is-active" data-tab="content">
             <span class="material-symbols-rounded" aria-hidden="true">inventory_2</span>
             Captured content
           </button>
         </nav>
 
-        <section class="tab-panel" data-panel="links">
+        <section class="tab-panel" data-panel="links" hidden>
           <section class="popup__actions toolbar">
             <button id="select-all" class="ghost">Select all</button>
-            <button id="delete-selected" class="ghost">Delete selected</button>
+            <button id="delete-selected" class="danger">Delete selected</button>
           </section>
 
           <section class="popup__history" aria-live="polite">
@@ -60,12 +61,13 @@
           </section>
         </section>
 
-        <section class="tab-panel" data-panel="content" hidden>
-          <section class="popup__actions toolbar">
-            <button id="content-select-all" class="ghost">Select all content</button>
-            <button id="content-preview-selected" class="ghost">Preview selected content</button>
-            <button id="content-download-selected" class="ghost">Download selected content</button>
-            <button id="content-delete-selected" class="ghost">Delete selected content</button>
+        <section class="tab-panel" data-panel="content">
+          <section class="popup__actions toolbar toolbar--content">
+            <button id="content-download-all" class="primary">Download all</button>
+            <button id="content-select-all" class="ghost">Select all</button>
+            <button id="content-preview-selected" class="ghost">Preview</button>
+            <button id="content-download-selected" class="ghost">Download selected</button>
+            <button id="content-delete-selected" class="danger">Delete selected</button>
           </section>
           <label class="filter-toggle">
             <input id="content-path-filter" type="checkbox" />
