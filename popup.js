@@ -24,7 +24,7 @@ const tabPanels = [...document.querySelectorAll(".tab-panel")];
 
 const VIRTUAL_ROW_HEIGHT = 86;
 const VIRTUAL_OVERSCAN = 6;
-const LONG_QUEUE_WAIT_CHANCE = 0.15;
+const QUEUE_LOAD_FALLBACK_MS = 30000;
 
 let selectedUrls = new Set();
 let selectedContentKeys = new Set();
@@ -78,15 +78,41 @@ const sendTabMessage = (tabId, message) =>
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const getRandomQueueOpenWait = () => {
-  if (Math.random() < LONG_QUEUE_WAIT_CHANCE) return 25000;
-  return 15000 + Math.round(Math.random() * 5000);
-};
+const randomBetween = (min, max) => min + Math.round(Math.random() * (max - min));
+const getRandomQueueDwellWait = () => randomBetween(8000, 13000);
+const getRandomQueueBetweenWait = () => randomBetween(2000, 3000);
 
-const getRandomQueueBetweenWait = () => {
-  if (Math.random() < LONG_QUEUE_WAIT_CHANCE) return 25000;
-  return 15000 + Math.round(Math.random() * 5000);
-};
+const waitForTabComplete = (tabId) =>
+  new Promise((resolve) => {
+    let resolved = false;
+
+    const cleanup = () => {
+      chrome.tabs.onUpdated.removeListener(onUpdated);
+      clearTimeout(timeoutId);
+    };
+
+    const finish = () => {
+      if (resolved) return;
+      resolved = true;
+      cleanup();
+      resolve();
+    };
+
+    const onUpdated = (updatedTabId, changeInfo) => {
+      if (updatedTabId === tabId && changeInfo.status === "complete") {
+        finish();
+      }
+    };
+
+    const timeoutId = setTimeout(finish, QUEUE_LOAD_FALLBACK_MS);
+    chrome.tabs.onUpdated.addListener(onUpdated);
+
+    chrome.tabs.get(tabId, (tab) => {
+      if (!chrome.runtime.lastError && tab?.status === "complete") {
+        finish();
+      }
+    });
+  });
 
 const collapseUrl = (url = "", maxLength = 72) => {
   if (!url || url.length <= maxLength) return url;
@@ -423,22 +449,25 @@ const processQueue = async () => {
 
   for (let index = 0; index < captures.length; index += 1) {
     const capture = captures[index];
-    const openWait = getRandomQueueOpenWait();
-    autoProcessButton.textContent = `Processing ${index + 1}/${captures.length}...`;
+    autoProcessButton.textContent = `Opening ${index + 1}/${captures.length}...`;
 
     await new Promise((resolve) => {
-      chrome.tabs.create({ url: capture.url, active: false }, (tab) => {
-        setTimeout(() => {
-          if (tab?.id) {
-            chrome.tabs.remove(tab.id, () => resolve());
-            return;
-          }
+      chrome.tabs.create({ url: capture.url, active: false }, async (tab) => {
+        if (!tab?.id) {
           resolve();
-        }, openWait);
+          return;
+        }
+
+        await waitForTabComplete(tab.id);
+        autoProcessButton.textContent = `Waiting ${index + 1}/${captures.length}...`;
+        await delay(getRandomQueueDwellWait());
+
+        chrome.tabs.remove(tab.id, () => resolve());
       });
     });
 
     if (index < captures.length - 1) {
+      autoProcessButton.textContent = `Next in queue ${index + 2}/${captures.length}...`;
       await delay(getRandomQueueBetweenWait());
     }
   }
