@@ -103,13 +103,6 @@ const collectWakeoLinks = () => {
     addEntry(anchor.href, "dom-link");
   });
 
-  performance
-    .getEntriesByType("resource")
-    .filter((entry) => entry?.name)
-    .forEach((entry) => {
-      addEntry(entry.name, "network-resource");
-    });
-
   return [...linkMap.values()];
 };
 
@@ -122,23 +115,83 @@ const pushCapturedLinks = () => {
   safeRuntimeSendMessage({ type: "capture-links", payload: { links } });
 };
 
-let recordIntervalId = null;
+let linkObserver = null;
+let pendingLinkEntries = new Map();
+let pendingLinkFlushTimerId = null;
 
-const stopContinuousCapture = () => {
-  if (!recordIntervalId) {
+const flushPendingLinkEntries = () => {
+  pendingLinkFlushTimerId = null;
+
+  if (!pendingLinkEntries.size || !isWakeoUrl(window.location.href)) {
+    pendingLinkEntries.clear();
     return;
   }
 
-  clearInterval(recordIntervalId);
-  recordIntervalId = null;
+  const links = [...pendingLinkEntries.values()];
+  pendingLinkEntries.clear();
+
+  safeRuntimeSendMessage({ type: "capture-links", payload: { links } });
+};
+
+const enqueueLinkCapture = (url, source = "dom-mutation") => {
+  const entry = toLinkEntry(url, source);
+  if (!entry) {
+    return;
+  }
+
+  pendingLinkEntries.set(entry.canonicalUrl, entry);
+
+  if (!pendingLinkFlushTimerId) {
+    pendingLinkFlushTimerId = setTimeout(flushPendingLinkEntries, 500);
+  }
+};
+
+const captureLinksFromAddedNode = (node) => {
+  if (node.nodeType !== Node.ELEMENT_NODE) {
+    return;
+  }
+
+  if (node.matches?.("a[href]")) {
+    enqueueLinkCapture(node.href);
+  }
+
+  node.querySelectorAll?.("a[href]").forEach((anchor) => {
+    enqueueLinkCapture(anchor.href);
+  });
+};
+
+const stopContinuousCapture = () => {
+  if (linkObserver) {
+    linkObserver.disconnect();
+    linkObserver = null;
+  }
+
+  if (pendingLinkFlushTimerId) {
+    clearTimeout(pendingLinkFlushTimerId);
+    pendingLinkFlushTimerId = null;
+  }
+
+  pendingLinkEntries.clear();
 };
 
 const startContinuousCapture = () => {
   stopContinuousCapture();
   pushCapturedLinks();
-  recordIntervalId = setInterval(() => {
-    pushCapturedLinks();
-  }, 3000);
+
+  if (!isWakeoUrl(window.location.href) || !document.documentElement) {
+    return;
+  }
+
+  linkObserver = new MutationObserver((mutations) => {
+    mutations.forEach((mutation) => {
+      mutation.addedNodes.forEach(captureLinksFromAddedNode);
+    });
+  });
+
+  linkObserver.observe(document.documentElement, {
+    childList: true,
+    subtree: true
+  });
 };
 
 const setContinuousCapture = (recording) => {
