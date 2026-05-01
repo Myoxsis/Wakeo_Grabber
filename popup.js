@@ -79,11 +79,14 @@ const sendTabMessage = (tabId, message) =>
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const getRandomQueueOpenWait = () => {
-  if (Math.random() < LONG_QUEUE_WAIT_CHANCE) return 15000;
-  return 2000 + Math.round(Math.random() * 3000);
+  if (Math.random() < LONG_QUEUE_WAIT_CHANCE) return 25000;
+  return 15000 + Math.round(Math.random() * 5000);
 };
 
-const getRandomQueueBetweenWait = () => 2000 + Math.round(Math.random() * 3000);
+const getRandomQueueBetweenWait = () => {
+  if (Math.random() < LONG_QUEUE_WAIT_CHANCE) return 25000;
+  return 15000 + Math.round(Math.random() * 5000);
+};
 
 const collapseUrl = (url = "", maxLength = 72) => {
   if (!url || url.length <= maxLength) return url;
