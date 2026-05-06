@@ -105,6 +105,56 @@
       </label>
     </main>
 
+    <section id="queue-settings-modal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="queue-settings-title">
+      <div class="modal__backdrop" data-modal-close></div>
+      <form id="queue-settings-form" class="modal__card">
+        <header class="modal__header">
+          <div>
+            <p class="eyebrow">Queue settings</p>
+            <h2 id="queue-settings-title">Auto process queue</h2>
+          </div>
+          <button id="queue-settings-close" class="icon-button" type="button" aria-label="Close settings" data-modal-close>
+            <span class="material-symbols-rounded" aria-hidden="true">close</span>
+          </button>
+        </header>
+
+        <p id="queue-settings-summary" class="modal__summary"></p>
+
+        <div class="settings-grid">
+          <label>
+            Open page for at least
+            <input id="queue-dwell-min" type="number" min="1" step="1" required />
+            seconds
+          </label>
+          <label>
+            Open page for at most
+            <input id="queue-dwell-max" type="number" min="1" step="1" required />
+            seconds
+          </label>
+          <label>
+            Wait between links at least
+            <input id="queue-between-min" type="number" min="0" step="1" required />
+            seconds
+          </label>
+          <label>
+            Wait between links at most
+            <input id="queue-between-max" type="number" min="0" step="1" required />
+            seconds
+          </label>
+          <label class="settings-grid__full">
+            If no links are selected, auto-select first
+            <select id="queue-auto-select-count"></select>
+            pending links
+          </label>
+        </div>
+
+        <footer class="modal__actions">
+          <button class="ghost" type="button" data-modal-close>Cancel</button>
+          <button class="primary" type="submit">Start queue</button>
+        </footer>
+      </form>
+    </section>
+
     <script src="popup.js"></script>
   </body>
 </html>
