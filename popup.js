@@ -22,11 +22,27 @@ const selectionCountPill = document.getElementById("selection-count");
 const contentCountPill = document.getElementById("content-count");
 const tabButtons = [...document.querySelectorAll(".tab")];
 const tabPanels = [...document.querySelectorAll(".tab-panel")];
+const queueSettingsModal = document.getElementById("queue-settings-modal");
+const queueSettingsForm = document.getElementById("queue-settings-form");
+const queueSettingsSummary = document.getElementById("queue-settings-summary");
+const queueDwellMinInput = document.getElementById("queue-dwell-min");
+const queueDwellMaxInput = document.getElementById("queue-dwell-max");
+const queueBetweenMinInput = document.getElementById("queue-between-min");
+const queueBetweenMaxInput = document.getElementById("queue-between-max");
+const queueAutoSelectCount = document.getElementById("queue-auto-select-count");
+const modalCloseButtons = [...document.querySelectorAll("[data-modal-close]")];
 
 const VIRTUAL_ROW_HEIGHT = 86;
 const VIRTUAL_OVERSCAN = 6;
 const QUEUE_LOAD_FALLBACK_MS = 30000;
 const QUEUE_TIMER_STEP_MS = 500;
+const DEFAULT_QUEUE_SETTINGS = {
+  dwellMinSeconds: 8,
+  dwellMaxSeconds: 13,
+  betweenMinSeconds: 2,
+  betweenMaxSeconds: 3,
+  autoSelectCount: 5
+};
 
 let selectedUrls = new Set();
 let selectedContentKeys = new Set();
@@ -36,6 +52,7 @@ let latestVisibleCapturedContent = [];
 let queuePaused = false;
 let queueRunning = false;
 let resumeResolver = null;
+let queueSettings = { ...DEFAULT_QUEUE_SETTINGS };
 
 const normalizeUrl = (url = "") => {
   if (!url) return null;
@@ -83,8 +100,10 @@ const sendTabMessage = (tabId, message) =>
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const randomBetween = (min, max) => min + Math.round(Math.random() * (max - min));
-const getRandomQueueDwellWait = () => randomBetween(8000, 13000);
-const getRandomQueueBetweenWait = () => randomBetween(2000, 3000);
+const getRandomQueueDwellWait = () =>
+  randomBetween(queueSettings.dwellMinSeconds * 1000, queueSettings.dwellMaxSeconds * 1000);
+const getRandomQueueBetweenWait = () =>
+  randomBetween(queueSettings.betweenMinSeconds * 1000, queueSettings.betweenMaxSeconds * 1000);
 
 const waitIfPaused = () =>
   new Promise((resolve) => {
@@ -190,12 +209,11 @@ const areAllCapturesSelected = (captures) =>
   captures.length > 0 && captures.every((item) => selectedUrls.has(getCaptureKey(item)));
 
 const setSelectionButtonsUi = (captures) => {
-  const hasSelection = selectedUrls.size > 0;
   const hasItems = captures.length > 0;
   const allSelected = areAllCapturesSelected(captures);
 
-  deleteSelectedButton.disabled = !hasSelection;
-  autoProcessButton.disabled = queueRunning || !hasSelection;
+  deleteSelectedButton.disabled = !selectedUrls.size;
+  autoProcessButton.disabled = queueRunning || !hasItems;
   selectAllButton.disabled = queueRunning || !hasItems;
   selectAllButton.textContent = allSelected ? "Deselect all" : "Select all";
   selectAllButton.setAttribute("aria-pressed", allSelected ? "true" : "false");
@@ -477,11 +495,80 @@ const resetQueueUi = async () => {
   await refreshHistory();
 };
 
+const closeQueueSettingsModal = () => {
+  if (queueSettingsModal) queueSettingsModal.hidden = true;
+};
+
+const setQueueSettingsSummary = (selectedCount, totalCount) => {
+  if (!queueSettingsSummary) return;
+  queueSettingsSummary.textContent = selectedCount
+    ? `${selectedCount} selected link${selectedCount === 1 ? "" : "s"} will be processed.`
+    : `No links selected. The first ${Math.min(queueSettings.autoSelectCount, totalCount)} pending link${Math.min(queueSettings.autoSelectCount, totalCount) === 1 ? "" : "s"} will be auto-selected.`;
+};
+
+const openQueueSettingsModal = async () => {
+  if (queueRunning) return;
+  if (!queueSettingsModal || !queueSettingsForm) {
+    await processQueue();
+    return;
+  }
+
+  const data = await storageGet({ capturedLinks: [] });
+  const captures = data.capturedLinks || [];
+  if (!captures.length) return;
+
+  const selectedCount = getSelectedCaptures(captures).length;
+  queueSettings.autoSelectCount = Math.min(queueSettings.autoSelectCount, captures.length);
+
+  queueDwellMinInput.value = queueSettings.dwellMinSeconds;
+  queueDwellMaxInput.value = queueSettings.dwellMaxSeconds;
+  queueBetweenMinInput.value = queueSettings.betweenMinSeconds;
+  queueBetweenMaxInput.value = queueSettings.betweenMaxSeconds;
+  queueAutoSelectCount.innerHTML = "";
+
+  for (let index = 1; index <= captures.length; index += 1) {
+    const option = document.createElement("option");
+    option.value = String(index);
+    option.textContent = String(index);
+    option.selected = index === queueSettings.autoSelectCount;
+    queueAutoSelectCount.appendChild(option);
+  }
+
+  setQueueSettingsSummary(selectedCount, captures.length);
+  queueSettingsModal.hidden = false;
+  queueDwellMinInput.focus();
+  queueDwellMinInput.select();
+};
+
+const getQueueSettingsFromForm = () => {
+  const dwellMinSeconds = Math.max(1, Number(queueDwellMinInput.value) || DEFAULT_QUEUE_SETTINGS.dwellMinSeconds);
+  const dwellMaxSeconds = Math.max(1, Number(queueDwellMaxInput.value) || DEFAULT_QUEUE_SETTINGS.dwellMaxSeconds);
+  const betweenMinSeconds = Math.max(0, Number(queueBetweenMinInput.value) || DEFAULT_QUEUE_SETTINGS.betweenMinSeconds);
+  const betweenMaxSeconds = Math.max(0, Number(queueBetweenMaxInput.value) || DEFAULT_QUEUE_SETTINGS.betweenMaxSeconds);
+  const autoSelectCount = Math.max(1, Number(queueAutoSelectCount.value) || DEFAULT_QUEUE_SETTINGS.autoSelectCount);
+
+  return {
+    dwellMinSeconds: Math.min(dwellMinSeconds, dwellMaxSeconds),
+    dwellMaxSeconds: Math.max(dwellMinSeconds, dwellMaxSeconds),
+    betweenMinSeconds: Math.min(betweenMinSeconds, betweenMaxSeconds),
+    betweenMaxSeconds: Math.max(betweenMinSeconds, betweenMaxSeconds),
+    autoSelectCount
+  };
+};
+
 const processQueue = async () => {
   if (queueRunning) return;
 
   const data = await storageGet({ capturedLinks: [] });
-  const captures = getSelectedCaptures(data.capturedLinks || []);
+  let captures = getSelectedCaptures(data.capturedLinks || []);
+
+  if (!captures.length) {
+    const allCaptures = data.capturedLinks || [];
+    captures = allCaptures.slice(0, queueSettings.autoSelectCount);
+    selectedUrls = new Set(captures.map(getCaptureKey));
+    setStatsUi(allCaptures, latestVisibleCapturedContent);
+  }
+
   if (!captures.length) return;
 
   queueRunning = true;
@@ -531,7 +618,28 @@ recordButton.addEventListener("click", async () => {
 });
 
 captureNowButton.addEventListener("click", () => captureCurrentTab("manual"));
-autoProcessButton.addEventListener("click", processQueue);
+autoProcessButton.addEventListener("click", openQueueSettingsModal);
+
+queueSettingsForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  queueSettings = getQueueSettingsFromForm();
+  closeQueueSettingsModal();
+  await processQueue();
+});
+
+queueAutoSelectCount?.addEventListener("change", async () => {
+  queueSettings.autoSelectCount = Math.max(1, Number(queueAutoSelectCount.value) || DEFAULT_QUEUE_SETTINGS.autoSelectCount);
+  const data = await storageGet({ capturedLinks: [] });
+  setQueueSettingsSummary(getSelectedCaptures(data.capturedLinks || []).length, (data.capturedLinks || []).length);
+});
+
+modalCloseButtons.forEach((button) => {
+  button.addEventListener("click", closeQueueSettingsModal);
+});
+
+window.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && queueSettingsModal && !queueSettingsModal.hidden) closeQueueSettingsModal();
+});
 
 queuePauseButton.addEventListener("click", () => {
   if (!queueRunning) return;
