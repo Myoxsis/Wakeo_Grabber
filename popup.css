@@ -37,20 +37,28 @@
   box-sizing: border-box;
 }
 
+html,
+body {
+  height: 100%;
+}
+
 body {
   margin: 0;
   background: radial-gradient(circle at top right, #f6f9ff, var(--bg));
   color: var(--text);
   min-width: 390px;
   min-height: 540px;
+  overflow: hidden;
 }
 
 .popup {
   width: 100%;
+  height: 100vh;
   padding: 14px;
   display: flex;
   flex-direction: column;
   gap: 12px;
+  overflow: hidden;
 }
 
 .panel {
@@ -63,8 +71,12 @@ body {
 
 .panel--flush {
   padding: 10px;
-  display: grid;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
   gap: 10px;
+  overflow: hidden;
 }
 
 .popup__header {
@@ -153,6 +165,7 @@ body {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
+  flex: 0 0 auto;
 }
 
 .tab {
@@ -174,6 +187,18 @@ body {
   border-color: var(--primary);
   background: var(--primary-soft);
   color: var(--primary);
+}
+
+.tab-panel {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.tab-panel:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 button {
@@ -220,6 +245,13 @@ button:disabled {
   cursor: not-allowed;
 }
 
+.popup__history {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .popup__history h2,
 .selected-content__header h2 {
   margin: 0 0 8px;
@@ -227,6 +259,7 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 6px;
+  flex: 0 0 auto;
 }
 
 .heading-icon {
@@ -240,6 +273,7 @@ button:disabled {
   gap: 8px;
   font-size: 12px;
   color: #384150;
+  flex: 0 0 auto;
 }
 
 .filter-toggle {
@@ -249,6 +283,7 @@ button:disabled {
   padding: 0 2px;
   font-size: 12px;
   color: #4a5872;
+  flex: 0 0 auto;
 }
 
 .path-badge {
@@ -271,6 +306,7 @@ button:disabled {
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.4);
   display: grid;
   gap: 8px;
+  flex: 0 0 auto;
 }
 
 .selected-content__header {
@@ -291,6 +327,7 @@ button:disabled {
   background: #fafcff;
   color: #243147;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  overflow: auto;
 }
 
 .history {
@@ -299,8 +336,10 @@ button:disabled {
   margin: 0;
   display: grid;
   gap: 8px;
-  max-height: 280px;
-  overflow: auto;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .history li {
