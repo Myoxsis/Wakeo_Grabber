@@ -283,7 +283,14 @@ const mergeFetchData = (existingItems, incomingItems) => {
 
     const existingItem = merged[existingIndex];
     const isTimeline = normalizedItem.endpointType === "timeline";
-    const candidateItem = { ...existingItem, ...normalizedItem };
+    const candidateItem = {
+      ...existingItem,
+      pageUrl: normalizedItem.pageUrl,
+      requestUrl: normalizedItem.requestUrl,
+      source: normalizedItem.source,
+      capturedAt: normalizedItem.capturedAt,
+      endpointType: normalizedItem.endpointType
+    };
 
     if (isTimeline) {
       if (shouldReplaceCapturedPayload({ data: existingItem.timeline, capturedAt: existingItem.capturedAt }, { data: normalizedItem.timeline, capturedAt: normalizedItem.capturedAt })) {
@@ -329,7 +336,14 @@ const mergeFetchData = (existingItems, incomingItems) => {
 
     const existingItem = merged[existingIndex];
     const isTimeline = normalizedItem.endpointType === "timeline";
-    const candidateItem = { ...existingItem, ...normalizedItem };
+    const candidateItem = {
+      ...existingItem,
+      pageUrl: normalizedItem.pageUrl,
+      requestUrl: normalizedItem.requestUrl,
+      source: normalizedItem.source,
+      capturedAt: normalizedItem.capturedAt,
+      endpointType: normalizedItem.endpointType
+    };
 
     if (isTimeline) {
       if (shouldReplaceCapturedPayload({ data: existingItem.timeline, capturedAt: existingItem.capturedAt }, { data: normalizedItem.timeline, capturedAt: normalizedItem.capturedAt })) {
