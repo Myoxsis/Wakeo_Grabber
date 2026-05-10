@@ -252,27 +252,36 @@ const shouldReplaceCapturedPayload = (existingItem, incomingItem) => {
 const mergeFetchData = (existingItems, incomingItems) => {
   const merged = [];
   const indexByKey = new Map();
-
-  existingItems.forEach((item) => {
+  const toNormalizedFetchItem = (item) => {
     const pageUrl = normalizeUrl(item.pageUrl);
     const requestUrl = normalizeUrl(item.requestUrl);
-
     const endpointType = getWakeoApiEndpointType(requestUrl);
+
     if (!pageUrl || !requestUrl || !isWakeoUrl(pageUrl) || !endpointType) {
-      return;
+      return null;
     }
 
-    const normalizedItem = {
+    return {
       pageUrl,
       requestUrl,
       source: item.source || "network-json",
       capturedAt: item.capturedAt || new Date().toISOString(),
       endpointType,
       data: endpointType === "shipment" ? item.data : undefined,
-      timeline: endpointType === "timeline" ? item.data : undefined
+      historicalData:
+        endpointType === "timeline"
+          ? (item.historicalData !== undefined ? item.historicalData : (item.timeline !== undefined ? item.timeline : item.data))
+          : undefined
     };
+  };
 
-    const key = pageUrl;
+  existingItems.forEach((item) => {
+    const normalizedItem = toNormalizedFetchItem(item);
+    if (!normalizedItem) {
+      return;
+    }
+
+    const key = normalizedItem.pageUrl;
     const existingIndex = indexByKey.get(key);
 
     if (existingIndex === undefined) {
@@ -293,8 +302,8 @@ const mergeFetchData = (existingItems, incomingItems) => {
     };
 
     if (isTimeline) {
-      if (shouldReplaceCapturedPayload({ data: existingItem.timeline, capturedAt: existingItem.capturedAt }, { data: normalizedItem.timeline, capturedAt: normalizedItem.capturedAt })) {
-        merged[existingIndex] = { ...candidateItem, timeline: normalizedItem.timeline };
+      if (shouldReplaceCapturedPayload({ data: existingItem.historicalData, capturedAt: existingItem.capturedAt }, { data: normalizedItem.historicalData, capturedAt: normalizedItem.capturedAt })) {
+        merged[existingIndex] = { ...candidateItem, historicalData: normalizedItem.historicalData };
       }
     } else if (shouldReplaceCapturedPayload(existingItem, normalizedItem)) {
       merged[existingIndex] = { ...candidateItem, data: normalizedItem.data };
@@ -302,25 +311,12 @@ const mergeFetchData = (existingItems, incomingItems) => {
   });
 
   incomingItems.forEach((item) => {
-    const pageUrl = normalizeUrl(item.pageUrl);
-    const requestUrl = normalizeUrl(item.requestUrl);
-
-    const endpointType = getWakeoApiEndpointType(requestUrl);
-    if (!pageUrl || !requestUrl || !isWakeoUrl(pageUrl) || !endpointType) {
+    const normalizedItem = toNormalizedFetchItem(item);
+    if (!normalizedItem) {
       return;
     }
 
-    const normalizedItem = {
-      pageUrl,
-      requestUrl,
-      source: item.source || "network-json",
-      capturedAt: item.capturedAt || new Date().toISOString(),
-      endpointType,
-      data: endpointType === "shipment" ? item.data : undefined,
-      timeline: endpointType === "timeline" ? item.data : undefined
-    };
-
-    const key = pageUrl;
+    const key = normalizedItem.pageUrl;
     const existingIndex = indexByKey.get(key);
 
     if (existingIndex === undefined) {
@@ -346,8 +342,8 @@ const mergeFetchData = (existingItems, incomingItems) => {
     };
 
     if (isTimeline) {
-      if (shouldReplaceCapturedPayload({ data: existingItem.timeline, capturedAt: existingItem.capturedAt }, { data: normalizedItem.timeline, capturedAt: normalizedItem.capturedAt })) {
-        merged[existingIndex] = { ...candidateItem, timeline: normalizedItem.timeline };
+      if (shouldReplaceCapturedPayload({ data: existingItem.historicalData, capturedAt: existingItem.capturedAt }, { data: normalizedItem.historicalData, capturedAt: normalizedItem.capturedAt })) {
+        merged[existingIndex] = { ...candidateItem, historicalData: normalizedItem.historicalData };
       }
     } else if (shouldReplaceCapturedPayload(existingItem, normalizedItem)) {
       merged[existingIndex] = { ...candidateItem, data: normalizedItem.data };
