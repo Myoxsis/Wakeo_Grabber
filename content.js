@@ -215,7 +215,7 @@ const collectShipmentFetchData = async () => {
     .map((entry) => entry.name)
     .filter((url) => {
       const normalized = normalizeUrl(url);
-      return normalized && isWakeoApiUrl(normalized);
+      return Boolean(normalized && getWakeoApiEndpointType(normalized));
     })
     .filter((url) => {
       const canonical = normalizeUrl(url);
@@ -264,7 +264,7 @@ const collectShipmentFetchData = async () => {
   return fetchData.filter(Boolean);
 };
 
-const isWakeoApiUrl = (url = "") => {
+const getWakeoApiEndpointType = (url = "") => {
   const canonicalUrl = normalizeUrl(url);
   if (!canonicalUrl) {
     return false;
@@ -276,7 +276,11 @@ const isWakeoApiUrl = (url = "") => {
     const pathname = parsed.pathname;
     const isInternalWakeoApiHost = hostname === "internal.api.wakeo.co";
     const isOrderPath = /^\/api\/v1\/orders\/[a-f0-9]+\/?$/i.test(pathname);
-    return isInternalWakeoApiHost && isOrderPath;
+    const isTimelinePath = /^\/api\/v1\/orders\/[a-f0-9]+\/timeline\/?$/i.test(pathname);
+    if (!isInternalWakeoApiHost) return null;
+    if (isOrderPath) return "shipment";
+    if (isTimelinePath) return "timeline";
+    return null;
   } catch (error) {
     return false;
   }
@@ -284,7 +288,8 @@ const isWakeoApiUrl = (url = "") => {
 
 const toPageHookFetchEntry = (payload) => {
   const requestUrl = normalizeUrl(payload?.requestUrl);
-  if (!requestUrl || !isWakeoApiUrl(requestUrl)) {
+  const endpointType = getWakeoApiEndpointType(requestUrl);
+  if (!requestUrl || !endpointType) {
     return null;
   }
 
@@ -298,6 +303,7 @@ const toPageHookFetchEntry = (payload) => {
     requestUrl,
     source: payload?.source || "page-network-hook",
     capturedAt: payload?.capturedAt || new Date().toISOString(),
+    endpointType,
     data: payload?.data
   };
 };

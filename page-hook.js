@@ -22,7 +22,7 @@
     }
   };
 
-  const isWakeoApiEndpoint = (url) => {
+  const getWakeoApiEndpointType = (url) => {
     if (!url || typeof url !== "string") {
       return false;
     }
@@ -33,14 +33,17 @@
       const pathname = parsed.pathname;
       const isInternalWakeoApiHost = hostname === "internal.api.wakeo.co";
       const isOrderPath = /^\/api\/v1\/orders\/[a-f0-9]+\/?$/i.test(pathname);
-      return isInternalWakeoApiHost && isOrderPath;
+      if (!isInternalWakeoApiHost) return null;
+      if (isOrderPath) return "shipment";
+      if (/^\/api\/v1\/orders\/[a-f0-9]+\/timeline\/?$/i.test(pathname)) return "timeline";
+      return null;
     } catch (error) {
       return false;
     }
   };
 
   const shouldCapture = (response, requestUrl) => {
-    if (!response || !response.ok || !isWakeoApiEndpoint(requestUrl)) {
+    if (!response || !response.ok || !getWakeoApiEndpointType(requestUrl)) {
       return false;
     }
 
@@ -87,7 +90,7 @@
     this.addEventListener("load", () => {
       try {
         const requestUrl = this.responseURL || this.__wakeoGrabberRequestUrl || "";
-        if (!isWakeoApiEndpoint(requestUrl) || this.status < 200 || this.status >= 300) {
+        if (!getWakeoApiEndpointType(requestUrl) || this.status < 200 || this.status >= 300) {
           return;
         }
 

@@ -39,7 +39,7 @@ const isShipmentUrl = (url = "") => {
   return canonicalUrl.toLowerCase().includes("shipment");
 };
 
-const isWakeoApiUrl = (url = "") => {
+const getWakeoApiEndpointType = (url = "") => {
   const canonicalUrl = normalizeUrl(url);
   if (!canonicalUrl) {
     return false;
@@ -51,7 +51,11 @@ const isWakeoApiUrl = (url = "") => {
     const pathname = parsed.pathname;
     const isInternalWakeoApiHost = hostname === "internal.api.wakeo.co";
     const isOrderPath = /^\/api\/v1\/orders\/[a-f0-9]+\/?$/i.test(pathname);
-    return isInternalWakeoApiHost && isOrderPath;
+    const isTimelinePath = /^\/api\/v1\/orders\/[a-f0-9]+\/timeline\/?$/i.test(pathname);
+    if (!isInternalWakeoApiHost) return null;
+    if (isOrderPath) return "shipment";
+    if (isTimelinePath) return "timeline";
+    return null;
   } catch (error) {
     return false;
   }
@@ -253,7 +257,8 @@ const mergeFetchData = (existingItems, incomingItems) => {
     const pageUrl = normalizeUrl(item.pageUrl);
     const requestUrl = normalizeUrl(item.requestUrl);
 
-    if (!pageUrl || !requestUrl || !isWakeoUrl(pageUrl) || !isWakeoApiUrl(requestUrl)) {
+    const endpointType = getWakeoApiEndpointType(requestUrl);
+    if (!pageUrl || !requestUrl || !isWakeoUrl(pageUrl) || !endpointType) {
       return;
     }
 
@@ -262,7 +267,9 @@ const mergeFetchData = (existingItems, incomingItems) => {
       requestUrl,
       source: item.source || "network-json",
       capturedAt: item.capturedAt || new Date().toISOString(),
-      data: item.data
+      endpointType,
+      data: endpointType === "shipment" ? item.data : undefined,
+      timeline: endpointType === "timeline" ? item.data : undefined
     };
 
     const key = pageUrl;
@@ -275,8 +282,15 @@ const mergeFetchData = (existingItems, incomingItems) => {
     }
 
     const existingItem = merged[existingIndex];
-    if (shouldReplaceCapturedPayload(existingItem, normalizedItem)) {
-      merged[existingIndex] = normalizedItem;
+    const isTimeline = normalizedItem.endpointType === "timeline";
+    const candidateItem = { ...existingItem, ...normalizedItem };
+
+    if (isTimeline) {
+      if (shouldReplaceCapturedPayload({ data: existingItem.timeline, capturedAt: existingItem.capturedAt }, { data: normalizedItem.timeline, capturedAt: normalizedItem.capturedAt })) {
+        merged[existingIndex] = { ...candidateItem, timeline: normalizedItem.timeline };
+      }
+    } else if (shouldReplaceCapturedPayload(existingItem, normalizedItem)) {
+      merged[existingIndex] = { ...candidateItem, data: normalizedItem.data };
     }
   });
 
@@ -284,7 +298,8 @@ const mergeFetchData = (existingItems, incomingItems) => {
     const pageUrl = normalizeUrl(item.pageUrl);
     const requestUrl = normalizeUrl(item.requestUrl);
 
-    if (!pageUrl || !requestUrl || !isWakeoUrl(pageUrl) || !isWakeoApiUrl(requestUrl)) {
+    const endpointType = getWakeoApiEndpointType(requestUrl);
+    if (!pageUrl || !requestUrl || !isWakeoUrl(pageUrl) || !endpointType) {
       return;
     }
 
@@ -293,7 +308,9 @@ const mergeFetchData = (existingItems, incomingItems) => {
       requestUrl,
       source: item.source || "network-json",
       capturedAt: item.capturedAt || new Date().toISOString(),
-      data: item.data
+      endpointType,
+      data: endpointType === "shipment" ? item.data : undefined,
+      timeline: endpointType === "timeline" ? item.data : undefined
     };
 
     const key = pageUrl;
@@ -311,8 +328,15 @@ const mergeFetchData = (existingItems, incomingItems) => {
     }
 
     const existingItem = merged[existingIndex];
-    if (shouldReplaceCapturedPayload(existingItem, normalizedItem)) {
-      merged[existingIndex] = normalizedItem;
+    const isTimeline = normalizedItem.endpointType === "timeline";
+    const candidateItem = { ...existingItem, ...normalizedItem };
+
+    if (isTimeline) {
+      if (shouldReplaceCapturedPayload({ data: existingItem.timeline, capturedAt: existingItem.capturedAt }, { data: normalizedItem.timeline, capturedAt: normalizedItem.capturedAt })) {
+        merged[existingIndex] = { ...candidateItem, timeline: normalizedItem.timeline };
+      }
+    } else if (shouldReplaceCapturedPayload(existingItem, normalizedItem)) {
+      merged[existingIndex] = { ...candidateItem, data: normalizedItem.data };
     }
   });
 
