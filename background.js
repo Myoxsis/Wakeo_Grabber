@@ -120,7 +120,6 @@ chrome.runtime.onInstalled.addListener(() => {
   }
 });
 
-
 const captureTab = async (tabId, reason = "auto") => {
   let delivered = await sendTabMessage(tabId, { type: "capture-request", reason });
 
@@ -249,106 +248,131 @@ const shouldReplaceCapturedPayload = (existingItem, incomingItem) => {
   return incomingCapturedAt > existingCapturedAt;
 };
 
+const pickTimelinePayload = (item) => {
+  if (item.historicalData !== undefined) return item.historicalData;
+  if (item.timeline !== undefined) return item.timeline;
+  return item.data;
+};
+
+const getLatestCapturedAt = (item) => {
+  const timestamps = [item.capturedAt, item.dataCapturedAt, item.historicalDataCapturedAt]
+    .map((value) => Date.parse(value || 0))
+    .filter((value) => !Number.isNaN(value));
+
+  if (!timestamps.length) {
+    return new Date().toISOString();
+  }
+
+  return new Date(Math.max(...timestamps)).toISOString();
+};
+
+const toNormalizedFetchItem = (item) => {
+  const pageUrl = normalizeUrl(item.pageUrl);
+  const requestUrl = normalizeUrl(item.requestUrl || item.dataRequestUrl || item.historicalDataRequestUrl);
+  const endpointType = getWakeoApiEndpointType(requestUrl);
+  const capturedAt = item.capturedAt || item.dataCapturedAt || item.historicalDataCapturedAt || new Date().toISOString();
+
+  if (!pageUrl || !requestUrl || !isWakeoUrl(pageUrl) || !endpointType) {
+    return null;
+  }
+
+  const normalizedItem = {
+    pageUrl,
+    source: item.source || "network-json",
+    capturedAt,
+    endpointTypes: Array.isArray(item.endpointTypes) ? [...new Set(item.endpointTypes)] : []
+  };
+
+  if (endpointType === "shipment") {
+    normalizedItem.data = item.data;
+    normalizedItem.dataCapturedAt = item.dataCapturedAt || capturedAt;
+    normalizedItem.dataRequestUrl = requestUrl;
+  }
+
+  if (endpointType === "timeline") {
+    normalizedItem.historicalData = pickTimelinePayload(item);
+    normalizedItem.historicalDataCapturedAt = item.historicalDataCapturedAt || capturedAt;
+    normalizedItem.historicalDataRequestUrl = requestUrl;
+  }
+
+  if (!normalizedItem.endpointTypes.includes(endpointType)) {
+    normalizedItem.endpointTypes.push(endpointType);
+  }
+
+  return normalizedItem;
+};
+
+const mergeEndpointTypes = (...items) =>
+  [...new Set(items.flatMap((item) => item?.endpointTypes || []).filter(Boolean))];
+
+const mergeFetchItem = (existingItem, incomingItem) => {
+  const mergedItem = {
+    ...existingItem,
+    pageUrl: incomingItem.pageUrl || existingItem.pageUrl,
+    source: incomingItem.source || existingItem.source || "network-json",
+    endpointTypes: mergeEndpointTypes(existingItem, incomingItem)
+  };
+
+  if (incomingItem.data !== undefined) {
+    const shouldReplaceData = shouldReplaceCapturedPayload(
+      { data: existingItem.data, capturedAt: existingItem.dataCapturedAt || existingItem.capturedAt },
+      { data: incomingItem.data, capturedAt: incomingItem.dataCapturedAt || incomingItem.capturedAt }
+    );
+
+    if (shouldReplaceData) {
+      mergedItem.data = incomingItem.data;
+      mergedItem.dataCapturedAt = incomingItem.dataCapturedAt || incomingItem.capturedAt;
+      mergedItem.dataRequestUrl = incomingItem.dataRequestUrl;
+    }
+  }
+
+  if (incomingItem.historicalData !== undefined) {
+    const shouldReplaceHistoricalData = shouldReplaceCapturedPayload(
+      { data: existingItem.historicalData, capturedAt: existingItem.historicalDataCapturedAt || existingItem.capturedAt },
+      { data: incomingItem.historicalData, capturedAt: incomingItem.historicalDataCapturedAt || incomingItem.capturedAt }
+    );
+
+    if (shouldReplaceHistoricalData) {
+      mergedItem.historicalData = incomingItem.historicalData;
+      mergedItem.historicalDataCapturedAt = incomingItem.historicalDataCapturedAt || incomingItem.capturedAt;
+      mergedItem.historicalDataRequestUrl = incomingItem.historicalDataRequestUrl;
+    }
+  }
+
+  mergedItem.capturedAt = getLatestCapturedAt(mergedItem);
+  return mergedItem;
+};
+
 const mergeFetchData = (existingItems, incomingItems) => {
   const merged = [];
   const indexByKey = new Map();
-  const toNormalizedFetchItem = (item) => {
-    const pageUrl = normalizeUrl(item.pageUrl);
-    const requestUrl = normalizeUrl(item.requestUrl);
-    const endpointType = getWakeoApiEndpointType(requestUrl);
 
-    if (!pageUrl || !requestUrl || !isWakeoUrl(pageUrl) || !endpointType) {
-      return null;
+  const addOrMergeItem = (item, shouldPrepend = false) => {
+    const normalizedItem = toNormalizedFetchItem(item);
+    if (!normalizedItem) {
+      return;
     }
 
-    return {
-      pageUrl,
-      requestUrl,
-      source: item.source || "network-json",
-      capturedAt: item.capturedAt || new Date().toISOString(),
-      endpointType,
-      data: endpointType === "shipment" ? item.data : undefined,
-      historicalData:
-        endpointType === "timeline"
-          ? (item.historicalData !== undefined ? item.historicalData : (item.timeline !== undefined ? item.timeline : item.data))
-          : undefined
-    };
+    const key = normalizedItem.pageUrl;
+    const existingIndex = indexByKey.get(key);
+
+    if (existingIndex === undefined) {
+      if (shouldPrepend) {
+        merged.unshift(normalizedItem);
+        indexByKey.clear();
+        merged.forEach((mergedItem, index) => indexByKey.set(mergedItem.pageUrl, index));
+      } else {
+        merged.push(normalizedItem);
+        indexByKey.set(key, merged.length - 1);
+      }
+      return;
+    }
+
+    merged[existingIndex] = mergeFetchItem(merged[existingIndex], normalizedItem);
   };
 
-  existingItems.forEach((item) => {
-    const normalizedItem = toNormalizedFetchItem(item);
-    if (!normalizedItem) {
-      return;
-    }
-
-    const key = normalizedItem.pageUrl;
-    const existingIndex = indexByKey.get(key);
-
-    if (existingIndex === undefined) {
-      merged.push(normalizedItem);
-      indexByKey.set(key, merged.length - 1);
-      return;
-    }
-
-    const existingItem = merged[existingIndex];
-    const isTimeline = normalizedItem.endpointType === "timeline";
-    const candidateItem = {
-      ...existingItem,
-      pageUrl: normalizedItem.pageUrl,
-      requestUrl: normalizedItem.requestUrl,
-      source: normalizedItem.source,
-      capturedAt: normalizedItem.capturedAt,
-      endpointType: normalizedItem.endpointType
-    };
-
-    if (isTimeline) {
-      if (shouldReplaceCapturedPayload({ data: existingItem.historicalData, capturedAt: existingItem.capturedAt }, { data: normalizedItem.historicalData, capturedAt: normalizedItem.capturedAt })) {
-        merged[existingIndex] = { ...candidateItem, historicalData: normalizedItem.historicalData };
-      }
-    } else if (shouldReplaceCapturedPayload(existingItem, normalizedItem)) {
-      merged[existingIndex] = { ...candidateItem, data: normalizedItem.data };
-    }
-  });
-
-  incomingItems.forEach((item) => {
-    const normalizedItem = toNormalizedFetchItem(item);
-    if (!normalizedItem) {
-      return;
-    }
-
-    const key = normalizedItem.pageUrl;
-    const existingIndex = indexByKey.get(key);
-
-    if (existingIndex === undefined) {
-      merged.unshift(normalizedItem);
-      indexByKey.set(key, 0);
-      for (const [trackedKey, trackedIndex] of indexByKey.entries()) {
-        if (trackedKey !== key) {
-          indexByKey.set(trackedKey, trackedIndex + 1);
-        }
-      }
-      return;
-    }
-
-    const existingItem = merged[existingIndex];
-    const isTimeline = normalizedItem.endpointType === "timeline";
-    const candidateItem = {
-      ...existingItem,
-      pageUrl: normalizedItem.pageUrl,
-      requestUrl: normalizedItem.requestUrl,
-      source: normalizedItem.source,
-      capturedAt: normalizedItem.capturedAt,
-      endpointType: normalizedItem.endpointType
-    };
-
-    if (isTimeline) {
-      if (shouldReplaceCapturedPayload({ data: existingItem.historicalData, capturedAt: existingItem.capturedAt }, { data: normalizedItem.historicalData, capturedAt: normalizedItem.capturedAt })) {
-        merged[existingIndex] = { ...candidateItem, historicalData: normalizedItem.historicalData };
-      }
-    } else if (shouldReplaceCapturedPayload(existingItem, normalizedItem)) {
-      merged[existingIndex] = { ...candidateItem, data: normalizedItem.data };
-    }
-  });
+  existingItems.forEach((item) => addOrMergeItem(item, false));
+  incomingItems.forEach((item) => addOrMergeItem(item, true));
 
   return merged;
 };
