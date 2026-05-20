@@ -246,6 +246,40 @@ button:disabled {
   cursor: not-allowed;
 }
 
+.token-panel {
+  display: grid;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.token-panel__label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.token-panel__textarea {
+  width: 100%;
+  min-height: 78px;
+  max-height: 140px;
+  resize: vertical;
+  border: 1px solid #d5dfef;
+  border-radius: 10px;
+  padding: 10px;
+  font-size: 12px;
+  background: #fbfcff;
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
+.token-panel__hint {
+  margin: 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+
 .popup__history {
   flex: 1 1 auto;
   min-height: 0;
